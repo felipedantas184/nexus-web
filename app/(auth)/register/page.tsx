@@ -1,0 +1,73 @@
+// app\(auth)\register\page.tsx
+
+import { Metadata } from 'next';
+import Link from 'next/link';
+import AuthLayout from '@/components/auth/AuthLayout';
+import AuthCard from '@/components/auth/ui/AuthCard';
+import RegisterFormContainer from '@/components/auth/forms/RegisterFormContainer';
+import { FaUserPlus, FaUserGraduate } from 'react-icons/fa';
+
+export const metadata: Metadata = {
+  title: 'Cadastro - Nexus Platform',
+  description: 'Crie sua conta na Nexus Platform',
+};
+
+interface RegisterPageProps {
+  searchParams: {
+    type?: string; // SearchParams em Server Components são tratados como strings
+  };
+}
+
+export default function RegisterPage({ searchParams }: RegisterPageProps) {
+  // Garantindo que o tipo seja válido
+  const defaultUserType = (searchParams.type === 'student' ? 'student' : 'professional') as 'student' | 'professional';
+  
+  const isStudent = defaultUserType === 'student';
+  const accentColor = isStudent ? 'text-purple-600' : 'text-indigo-600';
+  const oppositeColor = isStudent ? 'text-indigo-600' : 'text-purple-600';
+
+  return (
+    <AuthLayout
+      title={isStudent ? 'Comece sua Jornada' : 'Junte-se à Nossa Rede'}
+      subtitle={isStudent 
+        ? 'Cadastre-se para uma experiência gamificada de aprendizado' 
+        : 'Faça parte da plataforma que conecta terapia e educação'
+      }
+      type="register"
+      userType={defaultUserType}
+    >
+      <AuthCard
+        title={isStudent ? 'Cadastro do Aluno' : 'Cadastro Profissional'}
+        subtitle={isStudent 
+          ? 'Preencha os dados para criar sua conta de aluno'
+          : 'Complete suas informações profissionais'
+        }
+        icon={<FaUserPlus size={32} className={accentColor} />}
+        footer={
+          <div className="flex flex-col gap-2">
+            <div className="text-sm text-gray-600">
+              Já tem uma conta?{' '}
+              <Link 
+                href="/login" 
+                className="text-indigo-600 font-semibold hover:text-indigo-700 transition-colors"
+              >
+                Faça login
+              </Link>
+            </div>
+            <div className="mt-4 text-sm">
+              <Link 
+                href={isStudent ? '/register?type=professional' : '/register?type=student'}
+                className={`flex items-center gap-2 font-semibold hover:opacity-80 transition-colors ${oppositeColor}`}
+              >
+                <FaUserGraduate className="w-3.5 h-3.5" />
+                {isStudent ? 'Sou profissional' : 'Sou aluno'}
+              </Link>
+            </div>
+          </div>
+        }
+      >
+        <RegisterFormContainer defaultUserType={defaultUserType} />
+      </AuthCard>
+    </AuthLayout>
+  );
+}

@@ -1,0 +1,102 @@
+// components/auth/forms/StudentFields.tsx - VERSÃO CORRIGIDA
+'use client';
+
+import React, { useState } from 'react';
+import InputField from '../ui/InputField';
+import { FaIdCard, FaBirthdayCake, FaPhone, FaSchool, FaGraduationCap } from 'react-icons/fa';
+import { formatters } from '@/lib/utils/formatters';
+import { cpfValidator } from '@/lib/validation';
+
+interface StudentFieldsProps {
+  register: any;
+  errors: any;
+  loading: boolean;
+  onCPFChange?: (cleanCPF: string, isValid: boolean) => void;
+}
+
+export default function StudentFields({
+  register,
+  errors,
+  loading,
+  onCPFChange
+}: StudentFieldsProps) {
+  const [cpfValid, setCpfValid] = useState(false);
+
+  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleanCPF = e.target.value.replace(/\D/g, '');
+    const formatted = formatters.cpf(cleanCPF);
+
+    // Validar CPF
+    const validation = cpfValidator.validate(cleanCPF);
+    setCpfValid(validation.valid);
+
+    // Notificar componente pai (para criptografia)
+    onCPFChange?.(cleanCPF, validation.valid);
+
+    e.target.value = formatted;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatters.phone(e.target.value);
+    e.target.value = formatted;
+  };
+
+  return (
+    <>
+      <InputField
+        label="CPF"
+        type="text"
+        icon={<FaIdCard className="w-3.5 h-3.5" />}
+        placeholder="000.000.000-00"
+        maxLength={14}
+        error={errors.cpf?.message || (!cpfValid && "CPF inválido")}
+        {...register('cpf', {
+          onChange: handleCPFChange
+        })}
+        disabled={loading}
+      />
+
+      <InputField
+        label="Data de nascimento"
+        type="date"
+        icon={<FaBirthdayCake className="w-3.5 h-3.5" />}
+        error={errors.birthday?.message}
+        {...register('birthday')}
+        disabled={loading}
+      />
+
+      <InputField
+        label="Telefone (opcional)"
+        type="tel"
+        icon={<FaPhone className="w-3.5 h-3.5" />}
+        placeholder="(00) 00000-0000"
+        maxLength={15}
+        error={errors.phone?.message}
+        {...register('phone', {
+          onChange: handlePhoneChange
+        })}
+        disabled={loading}
+      />
+
+      <InputField
+        label="Escola"
+        type="text"
+        icon={<FaSchool className="w-3.5 h-3.5" />}
+        placeholder="Nome da instituição"
+        error={errors.school?.message}
+        {...register('school')}
+        disabled={loading}
+      />
+
+      <InputField
+        label="Série/Ano"
+        type="text"
+        icon={<FaGraduationCap className="w-3.5 h-3.5" />}
+        placeholder="Selecione a série"
+        error={errors.grade?.message}
+        {...register('grade')}
+        disabled={loading}
+      />
+    </>
+  );
+}
