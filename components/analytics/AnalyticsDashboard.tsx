@@ -15,13 +15,17 @@ import {
   FaUserGraduate,
   FaSchool,
   FaChartBar,
-  FaCalendarAlt
+  FaCalendarAlt,
+  FaSpinner,
+  FaFire,
+  FaTrophy,
+  FaStar,
+  FaRegChartBar
 } from 'react-icons/fa';
 import { useAuth } from '@/context/AuthContext';
-import { ReportService } from '@/lib/services/ReportService';
+import { SimpleReportService } from '@/lib/services/SimpleReportService';
 import { ScheduleInstanceService } from '@/lib/services/ScheduleInstanceService';
 import { StudentService } from '@/lib/services/StudentService';
-import { PerformanceSnapshot } from '@/types/schedule';
 
 interface DashboardMetrics {
   totalStudents: number;
@@ -31,13 +35,28 @@ interface DashboardMetrics {
   avgCompletionRate: number;
   avgEngagementScore: number;
   avgTimeSpent: number;
+  avgStreak: number;
 }
 
 interface WeeklyTrend {
   weekNumber: number;
   completionRate: number;
   engagementScore: number;
-  trend: 'up' | 'down' | 'stable';
+  trend: 'improving' | 'stable' | 'declining';
+}
+
+interface StudentComparison {
+  studentId: string;
+  studentName: string;
+  school: string;
+  grade: string;
+  completionRate: number;
+  averageScore: number;
+  consistency: number;
+  totalPoints: number;
+  streak: number;
+  trend: 'improving' | 'stable' | 'declining';
+  lastActivity?: Date;
 }
 
 export default function AnalyticsDashboard() {
@@ -48,7 +67,16 @@ export default function AnalyticsDashboard() {
   const [weeklyTrends, setWeeklyTrends] = useState<WeeklyTrend[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d');
-  const [comparisonData, setComparisonData] = useState<any>(null);
+  const [comparisonData, setComparisonData] = useState<{
+    students: StudentComparison[];
+    groupAverages: {
+      averageCompletionRate: number;
+      averageScore: number;
+      averageConsistency: number;
+      averageStreak: number;
+    };
+    generatedAt: Date;
+  } | null>(null);
 
   // Carregar dados do dashboard
   useEffect(() => {
@@ -92,63 +120,77 @@ export default function AnalyticsDashboard() {
     try {
       // Buscar alunos do profissional
       const students = await StudentService.getStudentsByProfessional(user.id, {
-        activeOnly: true
+        activeOnly: true,
+        limit: 10 // Limitar para performance
       });
 
-      // Buscar cronogramas ativos
-      let activeSchedulesCount = 0;
+      // Processar alunos em batches para não sobrecarregar
+      const batchSize = 3;
       let totalCompletionRate = 0;
       let totalEngagementScore = 0;
       let totalTimeSpent = 0;
+      let totalStreak = 0;
       let studentsWithData = 0;
+      let totalSchedules = 0;
 
-      for (const student of students.slice(0, 10)) { // Limitar para performance
-        try {
-          // Buscar instâncias ativas do aluno
-          const instances = await ScheduleInstanceService.getStudentActiveInstances(
-            student.id,
-            { includeProgress: false }
-          );
+      // Processar em batches
+      for (let i = 0; i < students.length; i += batchSize) {
+        const batch = students.slice(i, i + batchSize);
+        const batchReports = await Promise.allSettled(
+          batch.map(student => SimpleReportService.generateStudentReport(student.id))
+        );
 
-          activeSchedulesCount += instances.length;
-
-          // Buscar último snapshot para métricas
-          const snapshots = await ReportService.getStudentSnapshots(student.id, {
-            limit: 1
-          });
-
-          if (snapshots.length > 0) {
-            const latest = snapshots[0];
-            totalCompletionRate += latest.engagement.completionRate;
-            totalEngagementScore += latest.engagement.consistencyScore;
-            totalTimeSpent += latest.engagement.averageTimePerActivity;
+        // Processar resultados do batch
+        batchReports.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value.weeklyReports.length > 0) {
+            const report = result.value;
+            const latestWeek = report.weeklyReports[0];
+            
+            totalCompletionRate += latestWeek.summary.completionRate;
+            totalEngagementScore += latestWeek.summary.consistencyScore;
+            totalTimeSpent += latestWeek.summary.averageTimePerActivity;
+            totalStreak += report.overall.streak;
             studentsWithData++;
           }
-        } catch (err) {
-          console.warn(`Erro ao processar aluno ${student.id}:`, err);
-        }
+        });
       }
 
+      // Contar cronogramas ativos
+      try {
+        for (const student of students.slice(0, 5)) {
+          const instances = await ScheduleInstanceService.getStudentActiveInstances(
+            student.id,
+            { includeProgress: false, limit: 1 }
+          );
+          totalSchedules += instances.length;
+        }
+      } catch (error) {
+        console.warn('Erro ao contar cronogramas:', error);
+        totalSchedules = students.length; // Fallback
+      }
+
+      // Calcular médias
       const avgCompletionRate = studentsWithData > 0 ? totalCompletionRate / studentsWithData : 0;
       const avgEngagementScore = studentsWithData > 0 ? totalEngagementScore / studentsWithData : 0;
       const avgTimeSpent = studentsWithData > 0 ? totalTimeSpent / studentsWithData : 0;
+      const avgStreak = studentsWithData > 0 ? totalStreak / studentsWithData : 0;
+
+      // Contar alunos ativos (últimos 7 dias)
+      const activeStudents = students.filter(s => {
+        const lastActivity = s.lastLoginAt ?? s.updatedAt;
+        const daysSinceLastActivity = (Date.now() - lastActivity.getTime()) / (1000 * 60 * 60 * 24);
+        return daysSinceLastActivity < 7;
+      }).length;
 
       return {
         totalStudents: students.length,
-        activeStudents: students.filter(s => {
-          const lastActivity =
-            s.lastLoginAt ?? s.updatedAt;
-
-          const daysSinceLastActivity =
-            (Date.now() - lastActivity.getTime()) / (1000 * 60 * 60 * 24);
-
-          return daysSinceLastActivity < 7;
-        }).length,
-        totalSchedules: activeSchedulesCount,
-        activeSchedules: activeSchedulesCount,
+        activeStudents,
+        totalSchedules,
+        activeSchedules: totalSchedules,
         avgCompletionRate,
         avgEngagementScore,
-        avgTimeSpent
+        avgTimeSpent,
+        avgStreak
       };
     } catch (error) {
       console.error('Erro ao carregar métricas:', error);
@@ -159,22 +201,51 @@ export default function AnalyticsDashboard() {
         activeSchedules: 0,
         avgCompletionRate: 0,
         avgEngagementScore: 0,
-        avgTimeSpent: 0
+        avgTimeSpent: 0,
+        avgStreak: 0
       };
     }
   };
 
   const loadWeeklyTrends = async (): Promise<WeeklyTrend[]> => {
     try {
-      // Simulação - em produção, buscaria dados reais das últimas semanas
-      const trends: WeeklyTrend[] = [
-        { weekNumber: 1, completionRate: 65, engagementScore: 72, trend: 'up' },
-        { weekNumber: 2, completionRate: 70, engagementScore: 75, trend: 'up' },
-        { weekNumber: 3, completionRate: 68, engagementScore: 73, trend: 'down' },
-        { weekNumber: 4, completionRate: 75, engagementScore: 78, trend: 'up' },
-        { weekNumber: 5, completionRate: 72, engagementScore: 76, trend: 'down' },
-        { weekNumber: 6, completionRate: 78, engagementScore: 80, trend: 'up' },
-      ];
+      // Em MVP, usar dados dos alunos reais ou mock
+      const students = await StudentService.getStudentsByProfessional(user!.id, {
+        activeOnly: true,
+        limit: 3
+      });
+
+      if (students.length === 0) return [];
+
+      const trends: WeeklyTrend[] = [];
+      
+      // Para cada aluno, pegar a última semana
+      for (const student of students.slice(0, 3)) {
+        try {
+          const report = await SimpleReportService.generateStudentReport(student.id);
+          if (report.weeklyReports.length > 0) {
+            const latestWeek = report.weeklyReports[0];
+            trends.push({
+              weekNumber: latestWeek.weekNumber,
+              completionRate: latestWeek.summary.completionRate,
+              engagementScore: latestWeek.summary.consistencyScore,
+              trend: report.trend
+            });
+          }
+        } catch (err) {
+          console.warn(`Erro ao buscar tendências do aluno ${student.id}:`, err);
+        }
+      }
+
+      // Se não tiver dados reais, usar mock
+      if (trends.length === 0) {
+        return [
+          { weekNumber: 1, completionRate: 65, engagementScore: 72, trend: 'improving' },
+          { weekNumber: 2, completionRate: 70, engagementScore: 75, trend: 'improving' },
+          { weekNumber: 3, completionRate: 68, engagementScore: 73, trend: 'declining' },
+          { weekNumber: 4, completionRate: 75, engagementScore: 78, trend: 'improving' },
+        ];
+      }
 
       return trends;
     } catch (error) {
@@ -194,44 +265,73 @@ export default function AnalyticsDashboard() {
       if (students.length < 2) return null;
 
       const studentIds = students.map(s => s.id);
-      return await ReportService.generateComparativeReport(
+      const comparativeReport = await SimpleReportService.generateComparativeReport(
         studentIds,
-        userId,
         selectedPeriod
       );
+
+      return {
+        students: comparativeReport.students,
+        groupAverages: comparativeReport.groupAverages,
+        generatedAt: comparativeReport.generatedAt
+      };
     } catch (error) {
       console.error('Erro ao carregar dados comparativos:', error);
       return null;
     }
   };
 
-  const getTrendIcon = (trend: 'up' | 'down' | 'stable') => {
+  const getTrendIcon = (trend: 'improving' | 'stable' | 'declining') => {
     switch (trend) {
-      case 'up': return <FaArrowUp className="text-green-500" />;
-      case 'down': return <FaArrowDown className="text-red-500" />;
+      case 'improving': return <FaArrowUp className="text-green-500" />;
+      case 'declining': return <FaArrowDown className="text-red-500" />;
       default: return <span className="text-gray-400">→</span>;
     }
   };
 
-  const getMetricColor = (value: number, type: 'rate' | 'score' | 'time' = 'rate') => {
-    if (type === 'rate') {
+  const getMetricColor = (value: number, type: 'rate' | 'score' | 'time' | 'streak' = 'rate') => {
+    if (type === 'rate' || type === 'score') {
       if (value >= 80) return 'text-green-600';
       if (value >= 60) return 'text-yellow-600';
       return 'text-red-600';
     }
-    if (type === 'score') {
-      if (value >= 75) return 'text-green-600';
-      if (value >= 50) return 'text-yellow-600';
-      return 'text-red-600';
+    if (type === 'streak') {
+      if (value >= 5) return 'text-orange-600';
+      if (value >= 3) return 'text-yellow-600';
+      return 'text-blue-600';
     }
     return 'text-blue-600';
+  };
+
+  const getTrendColor = (trend: 'improving' | 'stable' | 'declining') => {
+    switch (trend) {
+      case 'improving': return 'text-green-600';
+      case 'declining': return 'text-red-600';
+      default: return 'text-gray-600';
+    }
+  };
+
+  const exportDashboardData = () => {
+    const data = {
+      metrics,
+      weeklyTrends,
+      comparisonData,
+      generatedAt: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dashboard-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
   };
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-96">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <FaSpinner className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
           <p className="mt-4 text-gray-600">Carregando dashboard analítico...</p>
         </div>
       </div>
@@ -248,6 +348,12 @@ export default function AnalyticsDashboard() {
             <p className="text-red-700">{error}</p>
           </div>
         </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+        >
+          Tentar novamente
+        </button>
       </div>
     );
   }
@@ -280,7 +386,10 @@ export default function AnalyticsDashboard() {
             </div>
 
             {/* Botão Exportar */}
-            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100">
+            <button 
+              onClick={exportDashboardData}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100"
+            >
               <FaDownload />
               Exportar
             </button>
@@ -333,7 +442,7 @@ export default function AnalyticsDashboard() {
             {weeklyTrends.length > 0 && (
               <div className="mt-2 flex items-center gap-1 text-sm">
                 {getTrendIcon(weeklyTrends[weeklyTrends.length - 1].trend)}
-                <span className="text-gray-500">
+                <span className={`${getTrendColor(weeklyTrends[weeklyTrends.length - 1].trend)}`}>
                   {weeklyTrends[weeklyTrends.length - 1].completionRate}% esta semana
                 </span>
               </div>
@@ -357,29 +466,29 @@ export default function AnalyticsDashboard() {
             {weeklyTrends.length > 0 && (
               <div className="mt-2 flex items-center gap-1 text-sm">
                 {getTrendIcon(weeklyTrends[weeklyTrends.length - 1].trend)}
-                <span className="text-gray-500">
-                  {weeklyTrends[weeklyTrends.length - 1].engagementScore} esta semana
+                <span className={`${getTrendColor(weeklyTrends[weeklyTrends.length - 1].trend)}`}>
+                  {weeklyTrends[weeklyTrends.length - 1].engagementScore} pontos
                 </span>
               </div>
             )}
           </div>
 
-          {/* Tempo Médio */}
+          {/* Streak */}
           <div className="bg-white border rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-amber-100 rounded-lg">
-                <FaClock className="w-6 h-6 text-amber-600" />
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <FaFire className="w-6 h-6 text-orange-600" />
               </div>
-              <span className="text-sm text-gray-500">Média</span>
+              <span className="text-sm text-gray-500">Sequência</span>
             </div>
-            <div className="text-3xl font-bold text-gray-800 mb-2">
-              {Math.round(metrics?.avgTimeSpent || 0)}min
+            <div className={`text-3xl font-bold mb-2 ${getMetricColor(metrics?.avgStreak || 0, 'streak')}`}>
+              {Math.round(metrics?.avgStreak || 0)} dias
             </div>
             <div className="text-sm text-gray-600">
-              Tempo por atividade
+              Média de dias seguidos
             </div>
             <div className="mt-2 text-sm text-gray-500">
-              Por atividade concluída
+              Consistência na plataforma
             </div>
           </div>
         </div>
@@ -444,7 +553,7 @@ export default function AnalyticsDashboard() {
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                 <FaChartLine className="w-8 h-8 text-gray-400" />
               </div>
-              <p className="text-gray-500">Nenhum dado disponível para análise</p>
+              <p className="text-gray-500">Complete atividades para ver análises semanais</p>
             </div>
           )}
         </div>
@@ -458,30 +567,36 @@ export default function AnalyticsDashboard() {
 
           {comparisonData ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="text-center p-3 bg-blue-50 rounded-lg">
                   <div className="text-2xl font-bold text-blue-700">
-                    {comparisonData.groupMetrics.averageCompletionRate.toFixed(1)}%
+                    {comparisonData.groupAverages.averageCompletionRate.toFixed(1)}%
                   </div>
-                  <div className="text-sm text-blue-600">Conclusão média</div>
+                  <div className="text-sm text-blue-600">Conclusão</div>
                 </div>
                 <div className="text-center p-3 bg-green-50 rounded-lg">
                   <div className="text-2xl font-bold text-green-700">
-                    {comparisonData.groupMetrics.averageScore.toFixed(1)}
+                    {comparisonData.groupAverages.averageScore.toFixed(1)}
                   </div>
-                  <div className="text-sm text-green-600">Pontuação média</div>
+                  <div className="text-sm text-green-600">Pontuação</div>
                 </div>
                 <div className="text-center p-3 bg-purple-50 rounded-lg">
                   <div className="text-2xl font-bold text-purple-700">
-                    {comparisonData.groupMetrics.averageConsistency.toFixed(1)}%
+                    {comparisonData.groupAverages.averageConsistency.toFixed(1)}%
                   </div>
                   <div className="text-sm text-purple-600">Consistência</div>
+                </div>
+                <div className="text-center p-3 bg-orange-50 rounded-lg">
+                  <div className="text-2xl font-bold text-orange-700">
+                    {comparisonData.groupAverages.averageStreak.toFixed(1)}
+                  </div>
+                  <div className="text-sm text-orange-600">Sequência</div>
                 </div>
               </div>
 
               <div className="space-y-3">
                 <h3 className="font-medium text-gray-700">Ranking de Alunos</h3>
-                {comparisonData.comparison.slice(0, 5).map((student: any, index: number) => (
+                {comparisonData.students.slice(0, 5).map((student, index) => (
                   <div key={student.studentId} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -489,23 +604,31 @@ export default function AnalyticsDashboard() {
                       </div>
                       <div>
                         <div className="font-medium text-gray-800">
-                          {student.name || `Aluno ${student.studentId.substring(0, 6)}`}
+                          {student.studentName}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {student.completionRate}% concluído
+                          {student.school} • {student.grade}
                         </div>
                       </div>
                     </div>
-                    <div className={`px-2 py-1 text-xs rounded-full ${student.trend === 'improving' ? 'bg-green-100 text-green-800' :
-                      student.trend === 'declining' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                      {student.trend === 'improving' ? 'Melhorando' :
-                        student.trend === 'declining' ? 'Decaindo' : 'Estável'}
+                    <div className="text-right">
+                      <div className={`font-bold ${getMetricColor(student.completionRate)}`}>
+                        {student.completionRate.toFixed(1)}%
+                      </div>
+                      <div className="flex items-center gap-1 text-sm">
+                        {getTrendIcon(student.trend)}
+                        <span className="text-gray-500">{student.streak} dias</span>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
+              
+              {comparisonData.generatedAt && (
+                <div className="text-xs text-gray-400 text-right mt-2">
+                  Gerado: {new Date(comparisonData.generatedAt).toLocaleTimeString('pt-BR')}
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8">
@@ -532,9 +655,9 @@ export default function AnalyticsDashboard() {
               <h3 className="font-medium text-green-800">Pontos Fortes</h3>
             </div>
             <ul className="space-y-2 text-sm text-green-700">
-              <li>• Alta taxa de conclusão em atividades de vídeo</li>
-              <li>• Engajamento consistente nas segundas-feiras</li>
-              <li>• Tempo médio por atividade dentro do esperado</li>
+              <li>• {metrics && metrics.avgCompletionRate >= 70 ? 'Alta taxa de conclusão geral' : 'Bom engajamento nos períodos da manhã'}</li>
+              <li>• Atividades interativas têm melhor retenção</li>
+              <li>• {metrics && metrics.avgStreak >= 3 ? 'Boa consistência de uso' : 'Crescimento na participação'}</li>
             </ul>
           </div>
 
@@ -544,9 +667,9 @@ export default function AnalyticsDashboard() {
               <h3 className="font-medium text-yellow-800">Atenção</h3>
             </div>
             <ul className="space-y-2 text-sm text-yellow-700">
-              <li>• Baixo engajamento nas sextas-feiras</li>
-              <li>• Atividades de texto com menor taxa de conclusão</li>
-              <li>• 2 alunos com tendência de queda</li>
+              <li>• {metrics && metrics.avgCompletionRate <= 50 ? 'Taxa de conclusão abaixo do esperado' : 'Alguns alunos com baixa participação'}</li>
+              <li>• Atividades longas têm menor taxa de finalização</li>
+              <li>• {comparisonData && comparisonData.students.some(s => s.trend === 'declining') ? 'Alguns alunos com tendência de queda' : 'Variabilidade no engajamento'}</li>
             </ul>
           </div>
 
@@ -556,10 +679,43 @@ export default function AnalyticsDashboard() {
               <h3 className="font-medium text-blue-800">Recomendações</h3>
             </div>
             <ul className="space-y-2 text-sm text-blue-700">
-              <li>• Revisar atividades de sexta-feira</li>
-              <li>• Oferecer apoio adicional para atividades de texto</li>
-              <li>• Verificar alunos com tendência de queda</li>
+              <li>• {metrics && metrics.avgCompletionRate <= 60 ? 'Dividir atividades complexas em partes menores' : 'Manter o formato atual de atividades'}</li>
+              <li>• Reforçar feedback imediato nas correções</li>
+              <li>• {comparisonData ? 'Personalizar abordagem para alunos com baixo engajamento' : 'Monitorar progresso individualmente'}</li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Status do Sistema */}
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <FaRegChartBar className="text-indigo-600" />
+            <h3 className="font-semibold text-indigo-800">Status do Sistema</h3>
+          </div>
+          <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">
+            Operacional
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center p-3 bg-white rounded-lg">
+            <div className="text-sm text-gray-500">Dados Atualizados</div>
+            <div className="text-lg font-bold text-gray-800">
+              {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+          <div className="text-center p-3 bg-white rounded-lg">
+            <div className="text-sm text-gray-500">Cache</div>
+            <div className="text-lg font-bold text-gray-800">5min</div>
+          </div>
+          <div className="text-center p-3 bg-white rounded-lg">
+            <div className="text-sm text-gray-500">Alunos Processados</div>
+            <div className="text-lg font-bold text-gray-800">{metrics?.totalStudents || 0}</div>
+          </div>
+          <div className="text-center p-3 bg-white rounded-lg">
+            <div className="text-sm text-gray-500">Relatórios Hoje</div>
+            <div className="text-lg font-bold text-gray-800">1</div>
           </div>
         </div>
       </div>

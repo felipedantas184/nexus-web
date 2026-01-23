@@ -1,8 +1,8 @@
-// hooks/useStudentReports.ts
+// MODIFICAR o hook completo:
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ReportService } from '@/lib/services/ReportService';
+import { SimpleReportService } from '@/lib/services/SimpleReportService';
 import { useAuth } from '@/context/AuthContext';
 
 export function useStudentReports(studentId?: string) {
@@ -10,7 +10,7 @@ export function useStudentReports(studentId?: string) {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const targetStudentId = studentId || (user?.role === 'student' ? user.id : null);
 
   const loadReports = useCallback(async () => {
@@ -22,12 +22,37 @@ export function useStudentReports(studentId?: string) {
 
     try {
       setLoading(true);
-      
-      const report = await ReportService.generateStudentReport(targetStudentId, {
-        includeDetailedData: true
-      });
-      
-      setReports([report]); // Para compatibilidade com array
+
+      // 🔥 USAR O NOVO SERVIÇO SIMPLIFICADO
+      const report = await SimpleReportService.generateStudentReport(targetStudentId);
+
+      // Converter para formato esperado pelos componentes
+      const formattedReport = {
+        summary: {
+          averageScore: report.overall.averageCompletionRate,
+          averageCompletionRate: report.overall.averageCompletionRate,
+          totalWeeks: report.weeklyReports.length,
+          latestWeek: report.weeklyReports[0]?.weekNumber || 0,
+          trend: report.trend,
+          bestWeek: report.weeklyReports.reduce((best, current) =>
+            current.summary.averageScore > best.summary.averageScore ? current : best
+          )?.weekNumber || 0
+        },
+        weeklyTrends: report.weeklyReports.map(week => ({
+          weekNumber: week.weekNumber,
+          completionRate: week.summary.completionRate,
+          averageScore: week.summary.averageScore,
+          trendDirection: report.trend
+        })),
+        insights: report.weeklyReports[0]?.insights || {
+          detectedPatterns: [],
+          predictedNextWeek: 'Estável',
+          confidence: 0.75
+        },
+        recommendations: report.weeklyReports[0]?.insights?.recommendations || []
+      };
+
+      setReports([formattedReport]);
       setError(null);
     } catch (err: any) {
       console.error('Erro ao carregar relatórios:', err);
@@ -46,9 +71,8 @@ export function useStudentReports(studentId?: string) {
     }
 
     try {
-      return await ReportService.generateComparativeReport(
+      return await SimpleReportService.generateComparativeReport(
         studentIds,
-        user.id,
         period
       );
     } catch (err: any) {

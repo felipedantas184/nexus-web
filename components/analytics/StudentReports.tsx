@@ -1,43 +1,50 @@
-// components/analytics/StudentReports.tsx
+// components/analytics/StudentReports.tsx - CORREÇÕES NO TOPO DO ARQUIVO
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  FaUser, 
-  FaChartBar, 
-  FaCalendarWeek, 
+import {
+  FaUser,
+  FaChartBar,
+  FaCalendarWeek,
   FaClock,
   FaStar,
   FaDownload,
   FaPrint,
   FaShare,
   FaLightbulb,
-  FaExclamationCircle
-} from 'react-icons/fa';
-import { FaArrowTrendDown, FaArrowTrendUp } from "react-icons/fa6";
+  FaExclamationCircle,
+  FaSchool,
+  FaGraduationCap,
+  FaFire,
+  FaSpinner,
+  FaCalendarAlt,
+  FaCheckCircle,
+  FaRegClock,
+  FaUserGraduate
+} from "react-icons/fa";
 import { useAuth } from '@/context/AuthContext';
-import { ReportService } from '@/lib/services/ReportService';
+import { SimpleReportService } from '@/lib/services/SimpleReportService';
 import { StudentService } from '@/lib/services/StudentService';
 import { Student } from '@/types/auth';
-import { PerformanceSnapshot } from '@/types/schedule';
+import { StudentReport, WeeklyReportData } from '@/types/schedule';
+import { FaArrowTrendDown, FaArrowTrendUp } from 'react-icons/fa6';
 
 interface StudentReportsProps {
-  studentId?: string; // Opcional - se não fornecido, usa o aluno logado
+  studentId?: string;
   showHeader?: boolean;
   onBack?: () => void;
 }
 
-export default function StudentReports({ 
+export default function StudentReports({
   studentId,
   showHeader = true,
-  onBack 
+  onBack
 }: StudentReportsProps) {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // ⚠️ MUDADO: inicial false
   const [error, setError] = useState<string | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
-  const [report, setReport] = useState<any>(null);
-  const [snapshots, setSnapshots] = useState<PerformanceSnapshot[]>([]);
+  const [report, setReport] = useState<StudentReport | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'weekly' | 'insights'>('overview');
 
@@ -46,7 +53,14 @@ export default function StudentReports({
 
   // Carregar dados
   useEffect(() => {
-    if (!targetStudentId) return;
+    // ⚠️ CORREÇÃO CRÍTICA: Se não tem studentId, não carrega nada
+    if (!targetStudentId) {
+      setLoading(false);
+      setError(null);
+      setStudent(null);
+      setReport(null);
+      return;
+    }
 
     const loadData = async () => {
       try {
@@ -57,17 +71,9 @@ export default function StudentReports({
         const studentData = await loadStudentData(targetStudentId);
         setStudent(studentData);
 
-        // 2. Gerar relatório do aluno
-        const studentReport = await ReportService.generateStudentReport(targetStudentId, {
-          includeDetailedData: true
-        });
+        // 2. Gerar relatório usando serviço simplificado
+        const studentReport = await SimpleReportService.generateStudentReport(targetStudentId);
         setReport(studentReport);
-
-        // 3. Carregar snapshots individuais
-        const studentSnapshots = await ReportService.getStudentSnapshots(targetStudentId, {
-          limit: 8 // Últimas 8 semanas
-        });
-        setSnapshots(studentSnapshots);
 
       } catch (err: any) {
         console.error('Erro ao carregar relatórios:', err);
@@ -78,19 +84,59 @@ export default function StudentReports({
     };
 
     loadData();
-  }, [targetStudentId]);
+  }, [targetStudentId, user]);
+
+  // ⚠️ ADICIONAR: Estado "sem aluno selecionado"
+  if (!targetStudentId && user?.role !== 'student') {
+    return (
+      <div className="text-center py-12">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+          <FaUserGraduate className="w-8 h-8 text-gray-400" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-700">
+          Selecione um aluno
+        </h3>
+        <p className="text-gray-500">
+          Escolha um aluno para visualizar o relatório individual
+        </p>
+      </div>
+    );
+  }
 
   const loadStudentData = async (id: string): Promise<Student> => {
     try {
-      // Em produção, buscaria do Firestore
-      // Por enquanto, retornar dados mock baseados no usuário atual
-      if (user?.role === 'student' && user.id === id) {
-        return user as Student;
-      }
-
       // Para profissionais visualizando alunos
       const stats = await StudentService.getStudentStats(id);
-      
+
+      // Buscar dados completos do aluno
+      const studentDoc = await StudentService.getStudentById(id, user?.id || '');
+
+      return {
+        id,
+        email: studentDoc.email,
+        name: studentDoc.name,
+        role: 'student',
+        profileComplete: true,
+        isActive: true,
+        createdAt: studentDoc.createdAt,
+        updatedAt: studentDoc.updatedAt,
+        lastLoginAt: studentDoc.lastLoginAt,
+        profile: {
+          cpf: studentDoc.profile.cpf || '',
+          birthday: studentDoc.profile.birthday,
+          school: studentDoc.profile.school,
+          grade: studentDoc.profile.grade,
+          assignedProfessionals: studentDoc.profile.assignedProfessionals || [],
+          assignedPrograms: studentDoc.profile.assignedPrograms || [],
+          streak: stats.streak,
+          totalPoints: stats.totalPoints,
+          level: stats.level,
+          achievements: []
+        }
+      };
+    } catch (error) {
+      console.error('Erro ao carregar dados do aluno:', error);
+      // Fallback básico
       return {
         id,
         email: 'aluno@exemplo.com',
@@ -107,15 +153,12 @@ export default function StudentReports({
           grade: '6º Ano',
           assignedProfessionals: [],
           assignedPrograms: [],
-          streak: stats.streak,
-          totalPoints: stats.totalPoints,
-          level: stats.level,
+          streak: 0,
+          totalPoints: 0,
+          level: 1,
           achievements: []
         }
       };
-    } catch (error) {
-      console.error('Erro ao carregar dados do aluno:', error);
-      throw error;
     }
   };
 
@@ -135,18 +178,41 @@ export default function StudentReports({
     }
   };
 
+  const getTrendBadge = (trend: 'improving' | 'stable' | 'declining', confidence: 'high' | 'medium' | 'low') => {
+    const confidenceColor = {
+      high: 'bg-green-100 text-green-800',
+      medium: 'bg-yellow-100 text-yellow-800',
+      low: 'bg-gray-100 text-gray-800'
+    }[confidence];
+
+    return (
+      <span className={`px-2 py-1 text-xs rounded-full ${confidenceColor}`}>
+        {trend === 'improving' ? 'Melhorando' :
+          trend === 'declining' ? 'Decaindo' : 'Estável'}
+      </span>
+    );
+  };
+
   const formatDateRange = (start: Date, end: Date) => {
     return `${start.toLocaleDateString('pt-BR')} - ${end.toLocaleDateString('pt-BR')}`;
   };
 
+  const formatTime = (minutes: number) => {
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h${mins}min` : `${hours}h`;
+  };
+
   const exportReport = () => {
+    if (!report) return;
+
     const data = {
       student: student?.name,
       report,
-      snapshots,
       generatedAt: new Date().toISOString()
     };
-    
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -155,12 +221,16 @@ export default function StudentReports({
     a.click();
   };
 
+  const printReport = () => {
+    window.print();
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-96">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Carregando relatórios...</p>
+          <FaSpinner className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+          <p className="mt-4 text-gray-600">Gerando relatório do aluno...</p>
         </div>
       </div>
     );
@@ -176,6 +246,12 @@ export default function StudentReports({
             <p className="text-red-700">{error}</p>
           </div>
         </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+        >
+          Tentar novamente
+        </button>
       </div>
     );
   }
@@ -220,7 +296,7 @@ export default function StudentReports({
                 </p>
               </div>
             </div>
-            
+
             <div className="flex gap-2">
               <button
                 onClick={exportReport}
@@ -229,7 +305,10 @@ export default function StudentReports({
                 <FaDownload />
                 Exportar
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+              <button
+                onClick={printReport}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
                 <FaPrint />
                 Imprimir
               </button>
@@ -237,7 +316,7 @@ export default function StudentReports({
           </div>
 
           {/* Informações do Aluno */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-3 bg-gray-50 rounded-lg">
               <div className="text-sm text-gray-500">Escola</div>
               <div className="font-medium">{student.profile.school}</div>
@@ -253,6 +332,29 @@ export default function StudentReports({
             <div className="p-3 bg-gray-50 rounded-lg">
               <div className="text-sm text-gray-500">Nível</div>
               <div className="font-medium">{student.profile.level}</div>
+            </div>
+          </div>
+
+          {/* Status do Relatório */}
+          <div className="mt-4 text-sm text-gray-500">
+            <div className="flex items-center gap-4">
+              <span>
+                <span className="font-medium">Gerado:</span> {report.generatedAt.toLocaleString('pt-BR')}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="font-medium">Status:</span>
+                <span className={`px-2 py-0.5 text-xs rounded-full ${report.dataFreshness === 'realtime' ? 'bg-green-100 text-green-800' :
+                  report.dataFreshness === 'cached' ? 'bg-blue-100 text-blue-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                  {report.dataFreshness === 'realtime' ? 'Atualizado' :
+                    report.dataFreshness === 'cached' ? 'Cache (5min)' : 'Antigo'}
+                </span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="font-medium">Tendência:</span>
+                {getTrendBadge(report.trend, report.trendConfidence)}
+              </span>
             </div>
           </div>
         </div>
@@ -287,75 +389,107 @@ export default function StudentReports({
           {/* Visão Geral */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {/* Resumo */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
+              {/* Cards de Resumo */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* Pontos e Nível */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <FaChartBar className="w-6 h-6 text-blue-600" />
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <FaStar className="w-5 h-5 text-blue-600" />
+                    </div>
                     <div>
-                      <div className="text-sm text-blue-700">Desempenho Geral</div>
+                      <div className="text-sm text-blue-700">Pontuação Total</div>
                       <div className="text-2xl font-bold text-blue-800">
-                        {report.summary.averageScore?.toFixed(1) || 'N/A'}
+                        {report.overall.totalPoints}
                       </div>
                     </div>
                   </div>
                   <div className="text-sm text-blue-700">
-                    {report.summary.trend === 'improving' ? 'Tendência positiva' :
-                     report.summary.trend === 'declining' ? 'Tendência negativa' :
-                     'Estável'}
+                    Nível {report.overall.currentLevel}
                   </div>
                 </div>
 
-                <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl">
+                {/* Streak */}
+                <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <FaCalendarWeek className="w-6 h-6 text-green-600" />
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <FaFire className="w-5 h-5 text-orange-600" />
+                    </div>
                     <div>
-                      <div className="text-sm text-green-700">Taxa de Conclusão</div>
+                      <div className="text-sm text-orange-700">Sequência Atual</div>
+                      <div className="text-2xl font-bold text-orange-800">
+                        {report.overall.streak} dias
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-sm text-orange-700">
+                    Consistência de uso
+                  </div>
+                </div>
+
+                {/* Atividades */}
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <FaCheckCircle className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="text-sm text-green-700">Atividades</div>
                       <div className="text-2xl font-bold text-green-800">
-                        {report.summary.averageCompletionRate?.toFixed(1) || 0}%
+                        {report.overall.totalActivitiesCompleted}
                       </div>
                     </div>
                   </div>
                   <div className="text-sm text-green-700">
-                    Semanas analisadas: {report.summary.totalWeeks || 0}
+                    {report.overall.averageCompletionRate.toFixed(1)}% conclusão
                   </div>
                 </div>
 
-                <div className="p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl">
+                {/* Tempo */}
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <FaStar className="w-6 h-6 text-purple-600" />
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <FaRegClock className="w-5 h-5 text-purple-600" />
+                    </div>
                     <div>
-                      <div className="text-sm text-purple-700">Consistência</div>
+                      <div className="text-sm text-purple-700">Tempo Total</div>
                       <div className="text-2xl font-bold text-purple-800">
-                        {snapshots[0]?.engagement.consistencyScore?.toFixed(1) || 0}%
+                        {formatTime(report.overall.totalTimeSpent)}
                       </div>
                     </div>
                   </div>
                   <div className="text-sm text-purple-700">
-                    Melhor semana: {report.summary.bestWeek || 'N/A'}
+                    Dedicado às atividades
                   </div>
                 </div>
               </div>
 
-              {/* Tendências */}
-              {report.weeklyTrends.length > 0 && (
+              {/* Últimas Semanas */}
+              {report.weeklyReports.length > 0 && (
                 <div className="bg-gray-50 rounded-xl p-6">
-                  <h3 className="font-semibold text-gray-800 mb-4">Tendências Recentes</h3>
+                  <h3 className="font-semibold text-gray-800 mb-4">Desempenho Recente</h3>
                   <div className="space-y-3">
-                    {report.weeklyTrends.slice(0, 4).map((trend: any, index: number) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg">
+                    {report.weeklyReports.slice(0, 3).map((week) => (
+                      <div key={week.weekNumber} className="flex items-center justify-between p-3 bg-white rounded-lg">
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded ${getTrendColor(trend.trendDirection)} bg-opacity-20`}>
-                            {getTrendIcon(trend.trendDirection)}
+                          <div className="p-2 bg-gray-100 rounded-lg">
+                            <FaCalendarAlt className="text-gray-400" />
                           </div>
                           <div>
-                            <div className="font-medium text-gray-800">Semana {trend.weekNumber}</div>
-                            <div className="text-sm text-gray-500">Conclusão: {trend.completionRate}%</div>
+                            <div className="font-medium text-gray-800">Semana {week.weekNumber}</div>
+                            <div className="text-sm text-gray-500">
+                              {formatDateRange(week.weekStartDate, week.weekEndDate)}
+                            </div>
                           </div>
                         </div>
+
                         <div className="text-right">
-                          <div className="font-bold text-gray-800">{trend.averageScore.toFixed(1)}</div>
-                          <div className="text-sm text-gray-500">Pontuação média</div>
+                          <div className={`font-bold ${week.summary.completionRate >= 70 ? 'text-green-600' : week.summary.completionRate >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {week.summary.completionRate.toFixed(1)}%
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {week.summary.completedActivities}/{week.summary.totalActivities} atividades
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -363,27 +497,42 @@ export default function StudentReports({
                 </div>
               )}
 
-              {/* Análise por Tipo de Atividade */}
-              {snapshots[0]?.activityTypeAnalysis && (
+              {/* Melhor Dia da Semana */}
+              {report.weeklyReports.length > 0 && (
                 <div className="bg-white border rounded-xl p-6">
-                  <h3 className="font-semibold text-gray-800 mb-4">Desempenho por Tipo de Atividade</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {Object.entries(snapshots[0].activityTypeAnalysis).map(([type, data]: [string, any]) => (
-                      <div key={type} className="p-4 bg-gray-50 rounded-lg">
-                        <div className="font-medium text-gray-800 mb-2 capitalize">{type}</div>
-                        <div className="space-y-1">
-                          <div className="text-sm text-gray-600">
-                            Concluídas: <span className="font-medium">{data.completed}</span>
+                  <h3 className="font-semibold text-gray-800 mb-4">Distribuição por Dia</h3>
+                  <div className="grid grid-cols-7 gap-2">
+                    {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day, index) => {
+                      const latestWeek = report.weeklyReports[0];
+                      const dayData = latestWeek.dayBreakdown[index];
+                      const completionRate = dayData?.total > 0
+                        ? (dayData.completed / dayData.total) * 100
+                        : 0;
+
+                      return (
+                        <div key={day} className="text-center">
+                          <div className="text-sm text-gray-500 mb-1">{day}</div>
+                          <div className="h-24 bg-gray-100 rounded-lg overflow-hidden relative">
+                            {completionRate > 0 && (
+                              <div
+                                className={`absolute bottom-0 left-0 right-0 ${completionRate >= 80 ? 'bg-green-500' :
+                                  completionRate >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                style={{ height: `${completionRate}%` }}
+                              />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="text-xs font-medium">
+                                {dayData?.completed || 0}/{dayData?.total || 0}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-600">
-                            Pontuação: <span className="font-medium">{data.averageScore.toFixed(1)}</span>
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            Tempo: <span className="font-medium">{data.averageTime.toFixed(0)}min</span>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {completionRate.toFixed(0)}%
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -402,94 +551,119 @@ export default function StudentReports({
                   className="px-4 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="all">Todas as semanas</option>
-                  {snapshots.map(snapshot => (
-                    <option key={snapshot.weekNumber} value={snapshot.weekNumber}>
-                      Semana {snapshot.weekNumber} ({formatDateRange(snapshot.weekStartDate, snapshot.weekEndDate)})
+                  {report.weeklyReports.map(week => (
+                    <option key={week.weekNumber} value={week.weekNumber}>
+                      Semana {week.weekNumber} ({formatDateRange(week.weekStartDate, week.weekEndDate)})
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Lista de Snapshots */}
+              {/* Lista de Semanas */}
               <div className="space-y-4">
-                {(selectedWeek === 'all' ? snapshots : snapshots.filter(s => s.weekNumber === selectedWeek)).map(snapshot => (
-                  <div key={snapshot.id} className="border rounded-xl overflow-hidden">
+                {(selectedWeek === 'all' ? report.weeklyReports : report.weeklyReports.filter(w => w.weekNumber === selectedWeek)).map(week => (
+                  <div key={week.weekNumber} className="border rounded-xl overflow-hidden">
                     <div className="bg-gray-50 px-6 py-4 border-b">
                       <div className="flex justify-between items-center">
                         <div>
                           <h4 className="font-semibold text-gray-800">
-                            Semana {snapshot.weekNumber}
+                            Semana {week.weekNumber}
                           </h4>
                           <p className="text-sm text-gray-500">
-                            {formatDateRange(snapshot.weekStartDate, snapshot.weekEndDate)}
+                            {formatDateRange(week.weekStartDate, week.weekEndDate)}
                           </p>
                         </div>
                         <div className="text-sm text-gray-500">
-                          {snapshot.engagement.completionRate}% concluído
+                          {week.summary.completionRate.toFixed(1)}% concluído
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="p-6">
+                      {/* Métricas da Semana */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div className="p-4 bg-blue-50 rounded-lg">
                           <div className="text-sm text-blue-700 mb-1">Engajamento</div>
                           <div className="text-2xl font-bold text-blue-800">
-                            {snapshot.engagement.consistencyScore}%
+                            {week.summary.consistencyScore.toFixed(1)}%
                           </div>
                           <div className="text-sm text-blue-600">
-                            Tempo médio: {snapshot.engagement.averageTimePerActivity}min
+                            Aderência: {week.summary.adherenceScore.toFixed(1)}%
                           </div>
                         </div>
-                        
+
                         <div className="p-4 bg-green-50 rounded-lg">
                           <div className="text-sm text-green-700 mb-1">Desempenho</div>
                           <div className="text-2xl font-bold text-green-800">
-                            {snapshot.performance.averageScorePerActivity.toFixed(1)}
+                            {week.summary.averageScore.toFixed(1)}
                           </div>
                           <div className="text-sm text-green-600">
-                            Pontos: {snapshot.performance.totalPointsEarned}
+                            {week.summary.totalPoints} pontos
                           </div>
                         </div>
-                        
+
                         <div className="p-4 bg-purple-50 rounded-lg">
-                          <div className="text-sm text-purple-700 mb-1">Dias</div>
+                          <div className="text-sm text-purple-700 mb-1">Tempo</div>
                           <div className="text-2xl font-bold text-purple-800">
-                            {snapshot.aggregatedData.activitiesByDay ? 
-                              Object.values(snapshot.aggregatedData.activitiesByDay).filter(d => d.completed > 0).length : 0}/7
+                            {formatTime(week.summary.averageTimePerActivity)}
                           </div>
                           <div className="text-sm text-purple-600">
-                            Dias com atividades
+                            por atividade
                           </div>
                         </div>
                       </div>
+
+                      {/* Detalhamento por Tipo */}
+                      {Object.keys(week.activityTypeBreakdown).length > 0 && (
+                        <div className="mb-6">
+                          <h5 className="font-medium text-gray-700 mb-3">Desempenho por Tipo</h5>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {Object.entries(week.activityTypeBreakdown).map(([type, data]: [string, any]) => (
+                              <div key={type} className="p-3 bg-gray-50 rounded-lg">
+                                <div className="font-medium text-gray-800 mb-1 capitalize">{type}</div>
+                                <div className="space-y-1">
+                                  <div className="text-sm text-gray-600">
+                                    Concluídas: <span className="font-medium">{data.completed}/{data.total}</span>
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    Pontuação: <span className="font-medium">{data.averageScore.toFixed(1)}</span>
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    Tempo: <span className="font-medium">{formatTime(data.averageTime)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Insights da Semana */}
                       <div className="space-y-3">
                         <h5 className="font-medium text-gray-700">Insights da Semana</h5>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {snapshot.insights.strengths.length > 0 && (
+                          {week.insights.strengths.length > 0 && (
                             <div className="p-3 bg-green-50 rounded-lg">
                               <div className="flex items-center gap-2 mb-2">
                                 <FaArrowTrendUp className="text-green-600" />
                                 <span className="font-medium text-green-800">Pontos Fortes</span>
                               </div>
                               <ul className="text-sm text-green-700 space-y-1">
-                                {snapshot.insights.strengths.slice(0, 3).map((strength: string, i: number) => (
+                                {week.insights.strengths.map((strength, i) => (
                                   <li key={i}>• {strength}</li>
                                 ))}
                               </ul>
                             </div>
                           )}
-                          
-                          {snapshot.insights.challenges.length > 0 && (
+
+                          {week.insights.challenges.length > 0 && (
                             <div className="p-3 bg-yellow-50 rounded-lg">
                               <div className="flex items-center gap-2 mb-2">
                                 <FaExclamationCircle className="text-yellow-600" />
                                 <span className="font-medium text-yellow-800">Desafios</span>
                               </div>
                               <ul className="text-sm text-yellow-700 space-y-1">
-                                {snapshot.insights.challenges.slice(0, 3).map((challenge: string, i: number) => (
+                                {week.insights.challenges.map((challenge, i) => (
                                   <li key={i}>• {challenge}</li>
                                 ))}
                               </ul>
@@ -505,51 +679,70 @@ export default function StudentReports({
           )}
 
           {/* Insights */}
-          {activeTab === 'insights' && report.insights && (
+          {activeTab === 'insights' && report.weeklyReports.length > 0 && (
             <div className="space-y-6">
               {/* Insights Gerados */}
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <FaLightbulb className="w-6 h-6 text-indigo-600" />
-                  <h3 className="font-semibold text-indigo-800">Análise de IA</h3>
+                  <h3 className="font-semibold text-indigo-800">Análise Detalhada</h3>
                 </div>
-                
-                {report.insights.detectedPatterns && report.insights.detectedPatterns.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="font-medium text-gray-800 mb-3">Padrões Detectados</h4>
-                    <div className="space-y-2">
-                      {report.insights.detectedPatterns.map((pattern: string, index: number) => (
-                        <div key={index} className="flex items-start gap-2">
-                          <div className="mt-1 w-2 h-2 bg-indigo-500 rounded-full"></div>
-                          <span className="text-gray-700">{pattern}</span>
-                        </div>
-                      ))}
-                    </div>
+
+                <div className="mb-6">
+                  <h4 className="font-medium text-gray-800 mb-3">Padrões Detectados</h4>
+                  <div className="space-y-2">
+                    {report.trend === 'improving' && (
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1 w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-gray-700">Tendência positiva de melhoria no desempenho</span>
+                      </div>
+                    )}
+                    {report.overall.streak >= 3 && (
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1 w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-gray-700">Boa consistência de uso da plataforma</span>
+                      </div>
+                    )}
+                    {report.overall.averageCompletionRate >= 70 && (
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1 w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-gray-700">Alta taxa de conclusão de atividades</span>
+                      </div>
+                    )}
+                    {report.overall.averageCompletionRate <= 50 && (
+                      <div className="flex items-start gap-2">
+                        <div className="mt-1 w-2 h-2 bg-yellow-500 rounded-full"></div>
+                        <span className="text-gray-700">Oportunidade para melhorar engajamento</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-white rounded-lg">
-                    <div className="text-sm text-gray-500 mb-1">Previsão Próxima Semana</div>
-                    <div className="font-medium text-gray-800">{report.insights.predictedNextWeek || 'Estável'}</div>
-                  </div>
-                  
-                  <div className="p-4 bg-white rounded-lg">
                     <div className="text-sm text-gray-500 mb-1">Confiança da Análise</div>
                     <div className="font-medium text-gray-800">
-                      {report.insights.confidence ? `${(report.insights.confidence * 100).toFixed(0)}%` : 'N/A'}
+                      {report.trendConfidence === 'high' ? 'Alta' :
+                        report.trendConfidence === 'medium' ? 'Média' : 'Baixa'}
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white rounded-lg">
+                    <div className="text-sm text-gray-500 mb-1">Semanas Analisadas</div>
+                    <div className="font-medium text-gray-800">
+                      {report.weeklyReports.length} semanas
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Recomendações */}
+              {/* Recomendações Personalizadas */}
               <div className="bg-white border rounded-xl p-6">
                 <h3 className="font-semibold text-gray-800 mb-4">Recomendações Personalizadas</h3>
-                
+
                 <div className="space-y-4">
-                  {report.recommendations && report.recommendations.length > 0 ? (
-                    report.recommendations.map((recommendation: string, index: number) => (
+                  {report.weeklyReports[0]?.insights.recommendations.length > 0 ? (
+                    report.weeklyReports[0].insights.recommendations.map((recommendation, index) => (
                       <div key={index} className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
                         <div className="flex-shrink-0 mt-1">
                           <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -575,7 +768,7 @@ export default function StudentReports({
                         <FaLightbulb className="w-8 h-8 text-gray-400" />
                       </div>
                       <p className="text-gray-500">
-                        Sem recomendações disponíveis no momento
+                        Continue usando a plataforma para gerar recomendações personalizadas
                       </p>
                     </div>
                   )}
@@ -585,7 +778,7 @@ export default function StudentReports({
               {/* Ações Sugeridas */}
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
                 <h3 className="font-semibold text-yellow-800 mb-4">Ações Sugeridas</h3>
-                
+
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg">
                     <div>
@@ -596,7 +789,7 @@ export default function StudentReports({
                       Revisar
                     </button>
                   </div>
-                  
+
                   <div className="flex items-center justify-between p-3 bg-white rounded-lg">
                     <div>
                       <div className="font-medium text-gray-800">Programar feedback</div>

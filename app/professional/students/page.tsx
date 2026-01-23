@@ -26,17 +26,6 @@ export default function StudentsPage() {
 
   const isCoordinator = user?.role === 'coordinator';
 
-  // Estatísticas mockadas (serão substituídas por dados reais)
-  const stats = {
-    total: 45,
-    active: 38,
-    pending: 7,
-    averagePoints: 1250,
-    averageStreak: 12.5,
-    topSchool: 'Colégio Estadual XYZ',
-    recentAdditions: 3
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">

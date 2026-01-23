@@ -58,12 +58,12 @@ export interface FileActivityConfig {
   maxFiles?: number;
 }
 
-export type ActivityConfig = 
-  | QuickActivityConfig 
-  | TextActivityConfig 
-  | QuizActivityConfig 
-  | VideoActivityConfig 
-  | ChecklistActivityConfig 
+export type ActivityConfig =
+  | QuickActivityConfig
+  | TextActivityConfig
+  | QuizActivityConfig
+  | VideoActivityConfig
+  | ChecklistActivityConfig
   | FileActivityConfig;
 
 // MODELOS PRINCIPAIS
@@ -72,19 +72,19 @@ export interface ScheduleTemplate extends BaseModel {
   name: string;
   description?: string;
   category: ScheduleCategory;
-  
+
   // Configurações de tempo
   startDate: Date;
   endDate?: Date;
   activeDays: number[]; // 0-6 (Domingo-Sábado)
-  
+
   // Regras de repetição
   repeatRules: {
     type: 'weekly';
     resetOnRepeat: boolean;
     maxRepetitions?: number;
   };
-  
+
   // Metadados
   metadata: {
     version: number;
@@ -98,16 +98,16 @@ export interface ScheduleActivity extends BaseModel {
   scheduleTemplateId: string;
   dayOfWeek: number; // 0-6
   orderIndex: number;
-  
+
   // Tipo e conteúdo
   type: ActivityType;
   title: string;
   description?: string;
   instructions: string;
-  
+
   // Configuração específica
   config: ActivityConfig;
-  
+
   // Pontuação e obrigatoriedade
   scoring: {
     isRequired: boolean;
@@ -115,7 +115,7 @@ export interface ScheduleActivity extends BaseModel {
     bonusPoints?: number;
     penaltyPoints?: number;
   };
-  
+
   // Metadados
   metadata: {
     estimatedDuration: number; // minutos
@@ -123,7 +123,7 @@ export interface ScheduleActivity extends BaseModel {
     therapeuticFocus?: string[];
     educationalFocus?: string[];
   };
-  
+
   // Recursos
   resources?: {
     links?: Array<{
@@ -144,24 +144,24 @@ export interface ScheduleInstance extends BaseModel {
   scheduleTemplateId: string;
   studentId: string;
   professionalId: string;
-  
+
   // Período atual
   currentWeekNumber: number;
   currentWeekStartDate: Date;
   currentWeekEndDate: Date;
-  
+
   // Estado
   status: InstanceStatus;
   startedAt: Date;
   completedAt?: Date;
-  
+
   // Personalizações
   customizations?: {
     excludedActivities?: string[];
     adjustedDeadlines?: Record<string, Date>;
     customInstructions?: Record<string, string>;
   };
-  
+
   // Cache de progresso (atualizado periodicamente)
   progressCache?: {
     completedActivities: number;
@@ -179,17 +179,17 @@ export interface ActivityProgress extends BaseModel {
   studentId: string;
   weekNumber: number;
   dayOfWeek: number;
-  
+
   // Snapshot da atividade no momento da execução
   activitySnapshot: ScheduleActivity;
-  
+
   // Status
   status: ProgressStatus;
   scheduledDate: Date;
   startedAt?: Date;
   completedAt?: Date;
   dueDate?: Date;
-  
+
   // Dados de execução
   executionData?: {
     timeSpent?: number; // minutos
@@ -201,7 +201,7 @@ export interface ActivityProgress extends BaseModel {
     notes?: string;
     attachments?: string[]; // URLs
   };
-  
+
   // Pontuação
   scoring: {
     pointsEarned: number;
@@ -211,7 +211,7 @@ export interface ActivityProgress extends BaseModel {
     evaluatedBy?: string;
     evaluatedAt?: Date;
   };
-  
+
   // Para quizzes
   attempts?: Array<{
     attemptNumber: number;
@@ -228,7 +228,7 @@ export interface PerformanceSnapshot extends BaseModel {
   weekNumber: number;
   weekStartDate: Date;
   weekEndDate: Date;
-  
+
   // Métricas de engajamento
   engagement: {
     completionRate: number; // 0-100
@@ -237,7 +237,7 @@ export interface PerformanceSnapshot extends BaseModel {
     adherenceToSchedule: number; // 0-100
     emotionalEngagement?: number; // 0-100
   };
-  
+
   // Métricas de desempenho
   performance: {
     totalPointsEarned: number;
@@ -246,14 +246,14 @@ export interface PerformanceSnapshot extends BaseModel {
     worstPerformingDay?: number;
     improvementFromPreviousWeek?: number;
   };
-  
+
   // Análise por tipo de atividade
   activityTypeAnalysis: Record<string, {
     completed: number;
     averageScore: number;
     averageTime: number;
   }>;
-  
+
   // Insights automáticos
   insights: {
     strengths: string[];
@@ -261,7 +261,7 @@ export interface PerformanceSnapshot extends BaseModel {
     recommendations: string[];
     riskFactors?: string[];
   };
-  
+
   // Dados brutos agregados
   aggregatedData: {
     activitiesByDay: Record<number, { completed: number; total: number }>;
@@ -321,4 +321,106 @@ export interface AssignScheduleDTO {
     excludedActivities?: string[];
     adjustedDeadlines?: Record<string, Date>;
   }>;
+}
+
+// Tipos para relatórios simplificados mas precisos
+export interface WeeklyReportData {
+  weekNumber: number;
+  weekStartDate: Date;
+  weekEndDate: Date;
+
+  summary: {
+    totalActivities: number;
+    completedActivities: number;
+    skippedActivities: number;
+    completionRate: number;
+    totalPoints: number;
+    averageScore: number;
+    consistencyScore: number;
+    averageTimePerActivity: number;
+    adherenceScore: number; // % de atividades no dia correto
+  };
+
+  dayBreakdown: Record<number, {
+    total: number;
+    completed: number;
+    skipped: number;
+    averageScore: number;
+    averageTime: number;
+  }>;
+
+  activityTypeBreakdown: Record<ActivityType, {
+    total: number;
+    completed: number;
+    averageScore: number;
+    averageTime: number;
+  }>;
+
+  insights: {
+    strengths: string[];
+    challenges: string[];
+    recommendations: string[];
+    generatedAt: Date;
+    dataSource: 'calculated' | 'cached';
+  };
+}
+
+export interface StudentReport {
+  studentId: string;
+  studentName: string;
+  school: string;
+  grade: string;
+
+  // Métricas sincronizadas com o que aluno vê
+  overall: {
+    totalPoints: number; // Mesmo que profile.totalPoints
+    currentLevel: number; // Mesmo que profile.level
+    streak: number; // Mesmo que profile.streak
+    totalActivitiesCompleted: number;
+    averageCompletionRate: number;
+    totalTimeSpent: number; // minutos
+    lastActivityDate?: Date;
+  };
+
+  // Histórico (máximo 8 semanas)
+  weeklyReports: WeeklyReportData[];
+
+  // Tendência baseada em dados reais
+  trend: 'improving' | 'stable' | 'declining';
+  trendConfidence: 'high' | 'medium' | 'low';
+
+  // Metadados de geração
+  generatedAt: Date;
+  dataFreshness: 'realtime' | 'cached' | 'stale';
+  calculationMethod: 'full' | 'incremental' | 'cached';
+}
+
+export interface ComparativeReport {
+  period: 'week' | 'month' | 'quarter';
+  startDate: Date;
+  endDate: Date;
+
+  students: Array<{
+    studentId: string;
+    studentName: string;
+    school: string;
+    grade: string;
+    completionRate: number;
+    averageScore: number;
+    consistency: number;
+    totalPoints: number;
+    streak: number;
+    trend: 'improving' | 'stable' | 'declining';
+    lastActivity?: Date;
+  }>;
+
+  groupAverages: {
+    averageCompletionRate: number;
+    averageScore: number;
+    averageConsistency: number;
+    averageStreak: number;
+  };
+
+  generatedAt: Date;
+  studentCount: number;
 }
