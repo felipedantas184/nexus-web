@@ -10,8 +10,25 @@ import {
   FaClock,
   FaArrowRight,
   FaExclamationTriangle,
-  FaCalendarCheck
+  FaCalendarCheck,
+  FaCalendarAlt,
+  FaUserPlus,
+  FaFileAlt,
+  FaTrophy,
+  FaFire,
+  FaCheckCircle,
+  FaChevronRight,
+  FaBell,
+  FaStar,
+  FaChartBar,
+  FaUserFriends,
+  FaLightbulb,
+  FaBullhorn,
+  FaHistory,
+  FaSync,
+  FaSearch
 } from 'react-icons/fa';
+import { FiTrendingUp, FiActivity, FiTarget, FiZap } from 'react-icons/fi';
 import { useAuth } from '@/context/AuthContext';
 import { useSchedules } from '@/hooks/useSchedules';
 import { ScheduleInstanceService } from '@/lib/services/ScheduleInstanceService';
@@ -19,7 +36,7 @@ import { StudentService } from '@/lib/services/StudentService';
 
 export default function ProfessionalDashboardPage() {
   const { user } = useAuth();
-  const { schedules, loading: schedulesLoading } = useSchedules({ 
+  const { schedules, loading: schedulesLoading, refresh: refreshSchedules } = useSchedules({ 
     activeOnly: true,
     limit: 5 
   });
@@ -28,10 +45,13 @@ export default function ProfessionalDashboardPage() {
     totalStudents: 0,
     activeStudents: 0,
     activeSchedules: 0,
-    pendingAssignments: 0
+    pendingAssignments: 0,
+    completionRate: 0,
+    avgEngagement: 0
   });
   const [loadingStats, setLoadingStats] = useState(true);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [topStudents, setTopStudents] = useState<any[]>([]);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -45,15 +65,45 @@ export default function ProfessionalDashboardPage() {
           activeOnly: true
         });
         
-        // Contar instâncias ativas
+        // Contar instâncias ativas e calcular engajamento
         let activeInstances = 0;
+        let totalCompletion = 0;
+        let totalInstances = 0;
+        const studentEngagement: any[] = [];
+        
         for (const student of students.slice(0, 10)) {
           const instances = await ScheduleInstanceService.getStudentActiveInstances(
             student.id,
-            { includeProgress: false, limit: 1 }
+            { includeProgress: true, limit: 1 }
           );
           activeInstances += instances.length;
+          
+          if (instances.length > 0) {
+            const instance = instances[0];
+            if (instance.progressCache) {
+              totalCompletion += instance.progressCache.completionPercentage;
+              totalInstances++;
+              studentEngagement.push({
+                id: student.id,
+                name: student.name,
+                engagement: instance.progressCache.completionPercentage,
+                streak: instance.progressCache.streakDays || 0
+              });
+            }
+          }
         }
+        
+        // Ordenar alunos por engajamento
+        const sortedStudents = studentEngagement
+          .sort((a, b) => b.engagement - a.engagement)
+          .slice(0, 3);
+        
+        setTopStudents(sortedStudents);
+        
+        const avgCompletion = totalInstances > 0 ? totalCompletion / totalInstances : 0;
+        const avgEngagement = students.length > 0 
+          ? (sortedStudents.reduce((sum, s) => sum + s.engagement, 0) / sortedStudents.length) 
+          : 0;
         
         setStats({
           totalStudents: students.length,
@@ -63,8 +113,18 @@ export default function ProfessionalDashboardPage() {
             return daysSinceLastActivity < 7;
           }).length,
           activeSchedules: activeInstances,
-          pendingAssignments: schedules.filter(s => !s.isActive).length
+          pendingAssignments: schedules.filter(s => !s.isActive).length,
+          completionRate: Math.round(avgCompletion),
+          avgEngagement: Math.round(avgEngagement)
         });
+        
+        // Simular atividades recentes (em produção, busque dados reais)
+        setRecentActivities([
+          { id: 1, type: 'assignment', title: 'Novo aluno atribuído', time: '10 min atrás', user: 'João Silva' },
+          { id: 2, type: 'completion', title: 'Cronograma concluído', time: '2 horas atrás', user: 'Maria Santos' },
+          { id: 3, type: 'progress', title: 'Progresso significativo', time: '1 dia atrás', user: 'Pedro Oliveira' },
+          { id: 4, type: 'alert', title: 'Aluno necessita atenção', time: '2 dias atrás', user: 'Ana Costa' },
+        ]);
         
       } catch (error) {
         console.error('Erro ao carregar dados do dashboard:', error);
@@ -76,222 +136,451 @@ export default function ProfessionalDashboardPage() {
     loadDashboardData();
   }, [user, schedules]);
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Dashboard Profissional</h1>
-          <p className="text-gray-600">Bem-vindo(a), {user?.name}</p>
-        </div>
-        
-        <Link
-          href="/professional/schedules/new"
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-lg hover:bg-indigo-700"
-        >
-          <FaCalendarPlus />
-          Novo Cronograma
-        </Link>
-      </div>
+  const refreshData = () => {
+    setLoadingStats(true);
+    refreshSchedules();
+    setTimeout(() => setLoadingStats(false), 1000);
+  };
 
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FaUsers className="w-5 h-5 text-blue-600" />
+  const getEngagementColor = (rate: number) => {
+    if (rate >= 80) return 'text-emerald-600 bg-emerald-50 border-emerald-100';
+    if (rate >= 60) return 'text-amber-600 bg-amber-50 border-amber-100';
+    return 'text-red-600 bg-red-50 border-red-100';
+  };
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'assignment': return <FaUserPlus className="w-4 h-4" />;
+      case 'completion': return <FaCheckCircle className="w-4 h-4" />;
+      case 'progress': return <FiTrendingUp className="w-4 h-4" />;
+      case 'alert': return <FaExclamationTriangle className="w-4 h-4" />;
+      default: return <FaBell className="w-4 h-4" />;
+    }
+  };
+
+  const getActivityColor = (type: string) => {
+    switch (type) {
+      case 'assignment': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'completion': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'progress': return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'alert': return 'bg-amber-50 text-amber-700 border-amber-200';
+      default: return 'bg-gray-50 text-gray-700 border-gray-200';
+    }
+  };
+
+  return (
+    <div className="p-4 md:p-6 min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
+      {/* Header do Dashboard */}
+      <div className="mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
+              <FaChartBar className="w-7 h-7 text-blue-600" />
             </div>
-            <span className="text-sm text-gray-500">Total</span>
-          </div>
-          <div className="text-2xl font-bold text-gray-800 mb-2">
-            {loadingStats ? '...' : stats.totalStudents}
-          </div>
-          <div className="text-sm text-gray-600">Alunos Atribuídos</div>
-          {!loadingStats && (
-            <div className="mt-2 text-sm text-green-600">
-              {stats.activeStudents} ativos esta semana
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-1">Dashboard Profissional</h1>
+              <p className="text-gray-600">Bem-vindo(a), <span className="font-medium text-blue-700">{user?.name}</span></p>
             </div>
-          )}
-        </div>
-        
-        <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <FaCalendarCheck className="w-5 h-5 text-green-600" />
-            </div>
-            <span className="text-sm text-gray-500">Ativos</span>
           </div>
-          <div className="text-2xl font-bold text-gray-800 mb-2">
-            {loadingStats ? '...' : stats.activeSchedules}
+          
+          <div className="flex items-center gap-3">
+            <Link
+              href="/professional/schedules/new"
+              className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-200 flex items-center gap-3"
+            >
+              <FaCalendarPlus className="w-4 h-4" />
+              <span>Novo Cronograma</span>
+            </Link>
           </div>
-          <div className="text-sm text-gray-600">Cronogramas Ativos</div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <FaChartLine className="w-5 h-5 text-purple-600" />
-            </div>
-            <span className="text-sm text-gray-500">Pendentes</span>
-          </div>
-          <div className="text-2xl font-bold text-gray-800 mb-2">
-            {stats.pendingAssignments}
-          </div>
-          <div className="text-sm text-gray-600">Para Atribuir</div>
-        </div>
-        
-        <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-amber-100 rounded-lg">
-              <FaClock className="w-5 h-5 text-amber-600" />
-            </div>
-            <span className="text-sm text-gray-500">Hoje</span>
-          </div>
-          <div className="text-2xl font-bold text-gray-800 mb-2">
-            {schedules.length}
-          </div>
-          <div className="text-sm text-gray-600">Cronogramas</div>
         </div>
       </div>
 
       {/* Grid Principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Cronogramas Recentes */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-xl shadow p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Cronogramas Recentes</h2>
-              <Link
-                href="/professional/schedules"
-                className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
-              >
-                Ver todos
-              </Link>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Coluna Principal (2/3) */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Cronogramas Recentes */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+                    <FaCalendarAlt className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Cronogramas Recentes</h2>
+                    <p className="text-sm text-gray-600">Seus cronogramas mais recentes</p>
+                  </div>
+                </div>
+                <Link
+                  href="/professional/schedules"
+                  className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                >
+                  Ver todos
+                  <FaChevronRight className="w-3 h-3" />
+                </Link>
+              </div>
             </div>
             
             {schedulesLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                <p className="mt-2 text-gray-500">Carregando cronogramas...</p>
+              <div className="p-8 text-center">
+                <div className="relative inline-block">
+                  <div className="w-12 h-12 border-3 border-indigo-200 rounded-full"></div>
+                  <div className="w-12 h-12 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+                </div>
+                <p className="mt-4 text-gray-600 font-medium">Carregando cronogramas...</p>
               </div>
             ) : schedules.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+              <div className="p-8 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl mb-4">
                   <FaCalendarPlus className="w-8 h-8 text-gray-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">
                   Nenhum cronograma criado
                 </h3>
-                <p className="text-gray-500 mb-4">
-                  Comece criando seu primeiro cronograma
+                <p className="text-gray-500 mb-6">
+                  Comece criando seu primeiro cronograma personalizado
                 </p>
                 <Link
                   href="/professional/schedules/new"
-                  className="inline-flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700"
+                  className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-200"
                 >
                   <FaCalendarPlus />
                   Criar Primeiro Cronograma
                 </Link>
               </div>
             ) : (
-              <div className="space-y-4">
-                {schedules.slice(0, 5).map(schedule => (
-                  <div key={schedule.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                    <div>
-                      <h4 className="font-medium text-gray-800">{schedule.name}</h4>
-                      <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                        <span>{schedule.metadata.totalActivities || 0} atividades</span>
-                        <span>•</span>
-                        <span>{schedule.metadata.estimatedWeeklyHours}h/semana</span>
+              <div className="p-6">
+                <div className="space-y-4">
+                  {schedules.slice(0, 5).map(schedule => {
+                    const categoryColor = schedule.category === 'therapeutic' ? 'bg-blue-100 text-blue-800' :
+                                         schedule.category === 'educational' ? 'bg-emerald-100 text-emerald-800' :
+                                         'bg-purple-100 text-purple-800';
+                    
+                    const categoryLabel = schedule.category === 'therapeutic' ? 'Terapêutico' :
+                                         schedule.category === 'educational' ? 'Educacional' : 'Misto';
+                    
+                    return (
+                      <div key={schedule.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 hover:shadow-sm transition-all duration-300">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                            schedule.category === 'therapeutic' ? 'bg-gradient-to-br from-blue-50 to-blue-100' :
+                            schedule.category === 'educational' ? 'bg-gradient-to-br from-emerald-50 to-emerald-100' :
+                            'bg-gradient-to-br from-purple-50 to-purple-100'
+                          }`}>
+                            <FaCalendarAlt className={`w-5 h-5 ${
+                              schedule.category === 'therapeutic' ? 'text-blue-600' :
+                              schedule.category === 'educational' ? 'text-emerald-600' :
+                              'text-purple-600'
+                            }`} />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-gray-900">{schedule.name}</h4>
+                            <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                              <div className="flex items-center gap-1">
+                                <FaChartLine className="w-3 h-3" />
+                                <span>{schedule.metadata.totalActivities || 0} atividades</span>
+                              </div>
+                              <span>•</span>
+                              <div className="flex items-center gap-1">
+                                <FaClock className="w-3 h-3" />
+                                <span>{schedule.metadata.estimatedWeeklyHours}h/semana</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${categoryColor}`}>
+                            {categoryLabel}
+                          </span>
+                          
+                          <Link
+                            href={`/professional/schedules/${schedule.id}`}
+                            className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center transition-colors"
+                            title="Ver detalhes"
+                          >
+                            <FaArrowRight className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Alunos com Melhor Desempenho */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
+                    <FaTrophy className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Melhor Desempenho</h2>
+                    <p className="text-sm text-gray-600">Alunos com maior engajamento</p>
+                  </div>
+                </div>
+                <Link
+                  href="/professional/students"
+                  className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                >
+                  Ver todos
+                  <FaChevronRight className="w-3 h-3" />
+                </Link>
+              </div>
+            </div>
+            
+            {topStudents.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl mb-4">
+                  <FaUsers className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-500">
+                  Sem dados de desempenho disponíveis
+                </p>
+              </div>
+            ) : (
+              <div className="p-6">
+                <div className="space-y-4">
+                  {topStudents.map((student, index) => (
+                    <div key={student.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200">
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
+                            <span className="font-bold text-blue-700">
+                              {student.name.split(' ').map((n:any) => n[0]).join('').toUpperCase().substring(0, 2)}
+                            </span>
+                          </div>
+                          {index === 0 && (
+                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center">
+                              <FaStar className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900">{student.name}</h4>
+                          <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                            <div className="flex items-center gap-1">
+                              <FiActivity className="w-3 h-3" />
+                              <span>{student.engagement}% engajamento</span>
+                            </div>
+                            <span>•</span>
+                            <div className="flex items-center gap-1">
+                              <FaFire className="w-3 h-3 text-amber-500" />
+                              <span>{student.streak} dias</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-gray-900">
+                          {student.engagement}%
+                        </div>
+                        <div className="text-xs text-gray-500">Engajamento</div>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        schedule.category === 'therapeutic' ? 'bg-blue-100 text-blue-800' :
-                        schedule.category === 'educational' ? 'bg-green-100 text-green-800' :
-                        'bg-purple-100 text-purple-800'
-                      }`}>
-                        {schedule.category === 'therapeutic' ? 'Terapêutico' :
-                         schedule.category === 'educational' ? 'Educacional' : 'Misto'}
-                      </span>
-                      
-                      <Link
-                        href={`/professional/schedules/${schedule.id}/assign`}
-                        className="text-indigo-600 hover:text-indigo-800"
-                      >
-                        <FaArrowRight />
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Ações Rápidas */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Ações Rápidas</h2>
+        {/* Coluna Lateral (1/3) */}
+        <div className="space-y-8">
+          {/* Ações Rápidas */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-100 to-green-100 flex items-center justify-center">
+                <FiZap className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Ações Rápidas</h2>
+                <p className="text-sm text-gray-600">Acesso rápido às principais funções</p>
+              </div>
+            </div>
+            
             <div className="space-y-3">
               <Link
                 href="/professional/schedules/new"
-                className="flex items-center justify-between p-3 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100"
+                className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-xl border border-blue-200 hover:border-blue-300 hover:shadow-sm transition-all duration-200 group"
               >
-                <span className="font-medium">Criar Cronograma</span>
-                <FaCalendarPlus />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
+                    <FaCalendarPlus className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <span className="font-medium">Criar Cronograma</span>
+                </div>
+                <FaChevronRight className="w-4 h-4 text-blue-400 group-hover:text-blue-600" />
+              </Link>
+              
+              <Link
+                href="/professional/students/assign"
+                className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-700 rounded-xl border border-emerald-200 hover:border-emerald-300 hover:shadow-sm transition-all duration-200 group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center">
+                    <FaUserPlus className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <span className="font-medium">Atribuir Alunos</span>
+                </div>
+                <FaChevronRight className="w-4 h-4 text-emerald-400 group-hover:text-emerald-600" />
               </Link>
               
               <Link
                 href="/professional/analytics"
-                className="flex items-center justify-between p-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
+                className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 rounded-xl border border-purple-200 hover:border-purple-300 hover:shadow-sm transition-all duration-200 group"
               >
-                <span className="font-medium">Ver Analytics</span>
-                <FaChartLine />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center">
+                    <FaChartLine className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <span className="font-medium">Ver Analytics</span>
+                </div>
+                <FaChevronRight className="w-4 h-4 text-purple-400 group-hover:text-purple-600" />
               </Link>
               
               <Link
                 href="/professional/students"
-                className="flex items-center justify-between p-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100"
+                className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 rounded-xl border border-amber-200 hover:border-amber-300 hover:shadow-sm transition-all duration-200 group"
               >
-                <span className="font-medium">Gerenciar Alunos</span>
-                <FaUsers />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center">
+                    <FaUserFriends className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <span className="font-medium">Gerenciar Alunos</span>
+                </div>
+                <FaChevronRight className="w-4 h-4 text-amber-400 group-hover:text-amber-600" />
               </Link>
             </div>
           </div>
 
-          {/* Alertas */}
-          <div className="bg-white rounded-xl shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Alertas</h2>
+          {/* Alertas e Notificações */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
+                <FaBell className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Alertas</h2>
+                <p className="text-sm text-gray-600">Requerem sua atenção</p>
+              </div>
+            </div>
+            
             <div className="space-y-3">
               {stats.pendingAssignments > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg">
-                  <FaExclamationTriangle className="text-yellow-500 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-yellow-800">
-                      {stats.pendingAssignments} cronograma(s) para atribuir
-                    </p>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      Atribua cronogramas pendentes aos alunos
-                    </p>
+                <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center mt-0.5">
+                      <FaExclamationTriangle className="w-3 h-3 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-amber-800">
+                        {stats.pendingAssignments} cronograma(s) para atribuir
+                      </p>
+                      <p className="text-sm text-amber-700 mt-1">
+                        Atribua cronogramas pendentes aos alunos
+                      </p>
+                      <Link
+                        href="/professional/schedules"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-800 mt-2"
+                      >
+                        Resolver agora
+                        <FaArrowRight className="w-2 h-2" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               )}
               
-              {stats.activeStudents < stats.totalStudents / 2 && (
-                <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
-                  <FaUsers className="text-blue-500 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-blue-800">
-                      Engajamento abaixo da média
-                    </p>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Apenas {stats.activeStudents} de {stats.totalStudents} alunos ativos
-                    </p>
+              {stats.activeStudents < stats.totalStudents / 2 && stats.totalStudents > 0 && (
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
+                      <FaBullhorn className="w-3 h-3 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-blue-800">
+                        Engajamento abaixo da média
+                      </p>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Apenas {stats.activeStudents} de {stats.totalStudents} alunos ativos
+                      </p>
+                      <Link
+                        href="/professional/analytics"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 mt-2"
+                      >
+                        Ver análise
+                        <FaArrowRight className="w-2 h-2" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               )}
+              
+              {stats.completionRate < 60 && stats.completionRate > 0 && (
+                <div className="p-4 bg-gradient-to-r from-red-50 to-pink-50 rounded-xl border border-red-200">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 flex items-center justify-center mt-0.5">
+                      <FaLightbulb className="w-3 h-3 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-red-800">
+                        Taxa de conclusão baixa
+                      </p>
+                      <p className="text-sm text-red-700 mt-1">
+                        {stats.completionRate}% de conclusão geral
+                      </p>
+                      <Link
+                        href="/professional/analytics?tab=performance"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-800 mt-2"
+                      >
+                        Investigar
+                        <FaArrowRight className="w-2 h-2" />
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Atividade Recente */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                <FaHistory className="w-6 h-6 text-gray-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Atividade Recente</h2>
+                <p className="text-sm text-gray-600">Últimas atualizações</p>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              {recentActivities.map(activity => (
+                <div key={activity.id} className="flex items-start gap-3">
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${getActivityColor(activity.type)}`}>
+                    {getActivityIcon(activity.type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-900 text-sm">{activity.title}</div>
+                    <div className="flex items-center justify-between mt-1">
+                      <div className="text-xs text-gray-500">{activity.user}</div>
+                      <div className="text-xs text-gray-400">{activity.time}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              <button className="w-full text-center text-sm text-indigo-600 hover:text-indigo-800 font-medium pt-2">
+                Ver atividade completa
+              </button>
             </div>
           </div>
         </div>

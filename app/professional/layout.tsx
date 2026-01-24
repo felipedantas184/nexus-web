@@ -1,4 +1,4 @@
-// app/layout/professional-layout.tsx
+// app\professional\layout.tsx
 'use client';
 
 import React, { useState } from 'react';
