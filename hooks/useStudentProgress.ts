@@ -50,6 +50,7 @@ interface Achievement {
   description: string;
   icon: string;
   unlocked: boolean;
+  type: string;
   progress?: number; // 0-100
   // REMOVIDO: unlockedAt para evitar recálculos
 }

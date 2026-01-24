@@ -22,6 +22,7 @@ export class AchievementUtils {
     title: string;
     description: string;
     icon: string;
+    type: string;
     unlocked: boolean;
     progress?: number;
   }> {
@@ -34,6 +35,7 @@ export class AchievementUtils {
       title: 'Primeiros Passos',
       description: 'Complete sua primeira atividade',
       icon: '👣',
+      type: 'completion',
       unlocked: firstStepsUnlocked,
       progress: firstStepsUnlocked ? 100 : 0
     });
@@ -45,6 +47,7 @@ export class AchievementUtils {
       title: 'Fogo Inicial',
       description: 'Mantenha um streak de 3 dias',
       icon: '🔥',
+      type: 'streak',
       unlocked: currentMetrics.streak >= 3,
       progress: streak3Progress
     });
@@ -56,6 +59,7 @@ export class AchievementUtils {
       title: 'Semana Perfeita',
       description: 'Mantenha um streak de 7 dias',
       icon: '🏆',
+      type: 'streak',
       unlocked: currentMetrics.streak >= 7,
       progress: streak7Progress
     });
@@ -67,6 +71,7 @@ export class AchievementUtils {
       title: 'Centenário',
       description: 'Alcance 100 pontos',
       icon: '💯',
+      type: 'completion',
       unlocked: currentMetrics.totalPoints >= 100,
       progress: points100Progress
     });
@@ -78,6 +83,7 @@ export class AchievementUtils {
       title: 'Mestre dos Pontos',
       description: 'Alcance 500 pontos',
       icon: '⭐',
+      type: 'points',
       unlocked: currentMetrics.totalPoints >= 500,
       progress: points500Progress
     });
@@ -89,6 +95,7 @@ export class AchievementUtils {
       title: 'Produtivo',
       description: 'Complete 50 atividades',
       icon: '✅',
+      type: 'streak',
       unlocked: currentMetrics.completedActivities >= 50,
       progress: activities50Progress
     });
@@ -100,6 +107,7 @@ export class AchievementUtils {
       title: 'Semana Impecável',
       description: 'Conclua 100% das atividades em uma semana',
       icon: '🎯',
+      type: 'speed',
       unlocked: perfectWeekUnlocked,
       progress: perfectWeekUnlocked ? 100 : 0
     });
@@ -111,6 +119,7 @@ export class AchievementUtils {
       title: 'Madrugador',
       description: 'Complete 5 atividades antes das 8h',
       icon: '🌅',
+      type: 'consistency',
       unlocked: false,
       progress: earlyBirdProgress
     });
@@ -123,6 +132,7 @@ export class AchievementUtils {
       title: 'Consistente',
       description: 'Mantenha >80% de conclusão por 3 semanas',
       icon: '📈',
+      type: 'completion',
       unlocked: consistentWeeks >= 3,
       progress: consistencyProgress
     });
