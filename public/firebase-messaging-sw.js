@@ -13,17 +13,55 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim()); // Tomar controle imediato
 });
 
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+self.addEventListener('push', (event) => {
+  console.log('[SW Mobile] 📬 Push recebido');
+
+  // Configurações específicas para mobile
+  const options = {
+    body: event.data?.text() || 'Nova atividade disponível',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/badge-72x72.png',
+    vibrate: isMobile ? [200, 100, 200, 100, 200] : [], // Vibração só no mobile
+    requireInteraction: false, // Mobile: deixar desaparecer
+    tag: 'nexus-mobile-notification',
+    data: {
+      source: 'mobile',
+      timestamp: new Date().toISOString()
+    }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification('Nexus Platform', options)
+  );
+});
+
+// ADICIONAR: Message listener para testes
+self.addEventListener('message', (event) => {
+  console.log('[SW Mobile] 📩 Mensagem recebida:', event.data);
+
+  if (event.data.type === 'TEST_NOTIFICATION') {
+    self.registration.showNotification('Teste Mobile', {
+      body: 'Teste via Service Worker',
+      icon: '/icons/icon-192x192.png',
+      vibrate: [100, 50, 100],
+      tag: 'test-mobile'
+    });
+  }
+});
+
 // Receber mensagens push (LOCAL - sem Firebase)
 self.addEventListener('push', (event) => {
   console.log('[Service Worker] 📬 Evento push recebido:', event);
-  
+
   let notificationData = {
     title: 'Nexus Platform',
     body: 'Você tem novas atividades!',
     icon: '/icons/icon-192x192.png',
     badge: '/icons/badge-72x72.png'
   };
-  
+
   // Tentar extrair dados do evento
   if (event.data) {
     try {
@@ -43,9 +81,9 @@ self.addEventListener('push', (event) => {
       }
     }
   }
-  
+
   console.log('[Service Worker] Mostrando notificação:', notificationData);
-  
+
   event.waitUntil(
     self.registration.showNotification(notificationData.title, {
       body: notificationData.body,
@@ -71,16 +109,16 @@ self.addEventListener('push', (event) => {
 // Clique na notificação
 self.addEventListener('notificationclick', (event) => {
   console.log('[Service Worker] 🔔 Notificação clicada:', event.notification);
-  
+
   event.notification.close();
-  
+
   const notificationData = event.notification.data || {};
   let urlToOpen = '/student/dashboard';
-  
+
   if (notificationData.route) {
     urlToOpen = notificationData.route;
   }
-  
+
   // Verificar ação do botão
   if (event.action === 'open' || !event.action) {
     event.waitUntil(
@@ -94,7 +132,7 @@ self.addEventListener('notificationclick', (event) => {
             return client.focus();
           }
         }
-        
+
         // Abrir nova janela se não encontrar
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
