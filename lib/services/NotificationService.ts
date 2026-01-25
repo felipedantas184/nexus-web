@@ -191,35 +191,104 @@ export class NotificationService {
     }
   }
 
-  // 5. TESTE DE NOTIFICAÇÃO (botão de teste)
+  static async checkServiceWorkerStatus(): Promise<{
+    registered: boolean;
+    active: boolean;
+    state?: string;
+    error?: string;
+  }> {
+    try {
+      if (!('serviceWorker' in navigator)) {
+        return { registered: false, active: false, error: 'Service Worker não suportado' };
+      }
+
+      const registrations = await navigator.serviceWorker.getRegistrations();
+
+      if (registrations.length === 0) {
+        return { registered: false, active: false, error: 'Nenhum Service Worker registrado' };
+      }
+
+      const registration = registrations.find(reg =>
+        reg.scope.includes(window.location.origin)
+      );
+
+      if (!registration) {
+        return { registered: false, active: false, error: 'Service Worker não encontrado para este domínio' };
+      }
+
+      return {
+        registered: true,
+        active: !!registration.active,
+        state: registration.active?.state || 'unknown'
+      };
+
+    } catch (error: any) {
+      return {
+        registered: false,
+        active: false,
+        error: error.message
+      };
+    }
+  }
+
+  // ATUALIZAR testNotification
   static async testNotification(): Promise<boolean> {
     try {
-      // Primeiro, verificar permissão
+      console.log('=== INICIANDO TESTE DE NOTIFICAÇÃO ===');
+
+      // 1. Verificar Service Worker
+      const swStatus = await this.checkServiceWorkerStatus();
+      console.log('Status SW:', swStatus);
+
+      if (!swStatus.active) {
+        console.error('❌ Service Worker não está ativo');
+        throw new Error('Service Worker não está ativo. Recarregue a página.');
+      }
+
+      // 2. Verificar permissão
       if (Notification.permission !== 'granted') {
+        console.log('Solicitando permissão...');
         const permission = await this.requestNotificationPermission();
         if (permission !== 'granted') {
-          return false;
+          throw new Error('Permissão não concedida');
         }
       }
 
-      // Enviar notificação local
-      const success = await this.sendLocalNotification(
-        '✅ Teste de Notificação',
-        'Esta é uma notificação de teste da Nexus Platform!',
-        {
+      // 3. Tentar via Service Worker primeiro
+      if (swStatus.active && 'serviceWorker' in navigator) {
+        console.log('Enviando via Service Worker...');
+        const registration = await navigator.serviceWorker.ready;
+
+        // Enviar mensagem para SW
+        registration.active?.postMessage({
+          type: 'SHOW_NOTIFICATION',
+          title: '✅ Teste Funcionando',
+          body: 'Notificação via Service Worker!',
           data: {
             test: true,
-            route: '/student/dashboard',
-            timestamp: new Date().toISOString()
-          },
-          requireInteraction: true // Manter visível para teste
+            timestamp: new Date().toISOString(),
+            route: '/student/dashboard'
+          }
+        });
+
+        console.log('✅ Mensagem enviada para SW');
+        return true;
+      }
+
+      // 4. Fallback: notificação direta
+      console.log('Tentando notificação direta...');
+      return await this.sendLocalNotification(
+        'Teste Direto',
+        'Notificação de teste',
+        {
+          icon: '/icons/icon-192x192.png',
+          requireInteraction: true
         }
       );
 
-      return success;
-    } catch (error) {
-      console.error('Erro no teste de notificação:', error);
-      return false;
+    } catch (error: any) {
+      console.error('❌ Erro no teste:', error);
+      throw error;
     }
   }
 
