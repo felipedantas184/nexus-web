@@ -13,7 +13,7 @@ export default function NotificationManager() {
     permission: NotificationPermission;
     serviceWorker: boolean;
   } | null>(null);
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -31,18 +31,18 @@ export default function NotificationManager() {
 
   const requestPermission = async () => {
     if (!notificationStatus?.supported) return;
-    
+
     setIsLoading(true);
     setError(null);
 
     try {
       const permission = await NotificationService.requestNotificationPermission();
-      
+
       if (permission === 'granted') {
         // Atualizar status
         await checkNotificationStatus();
         console.log('✅ Notificações ativadas com sucesso!');
-        
+
         // Mostrar feedback visual
         showSuccessMessage();
       } else if (permission === 'denied') {
@@ -65,7 +65,7 @@ export default function NotificationManager() {
 
   const openBrowserSettings = () => {
     const userAgent = navigator.userAgent.toLowerCase();
-    
+
     if (userAgent.includes('chrome') || userAgent.includes('chromium')) {
       try {
         window.open('chrome://settings/content/notifications', '_blank');
@@ -104,22 +104,46 @@ export default function NotificationManager() {
 4. Recarregue a página
       
 Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
-    
+
     alert(instructions);
   };
 
   const testNotification = async () => {
     try {
+      setIsLoading(true);
+
+      // Feedback visual
+      console.log('Iniciando teste no mobile...');
+
       const success = await NotificationService.testNotification();
-      
+
       if (success) {
-        alert('✅ Notificação de teste enviada! Verifique se recebeu.');
+        // Feedback no mobile
+        alert('✅ Notificação enviada!\n\nSe não aparecer:\n1. Verifique se o som está ligado\n2. Veja a barra de notificações\n3. O ícone pode aparecer pequeno');
+
+        // Log adicional
+        console.log('✅ Teste bem-sucedido no mobile');
       } else {
-        alert('❌ Não foi possível enviar a notificação de teste.');
+        // Diagnosticar problema
+        const status = await NotificationService.checkNotificationSupport();
+
+        let errorMsg = 'Não foi possível enviar a notificação.\n';
+
+        if (!status.serviceWorker) {
+          errorMsg += '\n• Service Worker não está ativo';
+        }
+        if (status.permission !== 'granted') {
+          errorMsg += '\n• Permissão não concedida';
+        }
+
+        alert(`❌ ${errorMsg}\n\nTente:\n1. Recarregar a página\n2. Limpar cache do navegador\n3. Verificar configurações do site`);
       }
+
     } catch (err: any) {
-      console.error('Erro no teste:', err);
-      alert('Erro ao testar notificação: ' + err.message);
+      console.error('Erro no teste mobile:', err);
+      alert(`Erro: ${err.message || 'Desconhecido'}\n\nTente em "Site para computador"`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -207,7 +231,7 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
             )}
           </button>
         </div>
-        
+
         {error && (
           <div className="mt-3 p-2 bg-red-50 border border-red-100 rounded">
             <p className="text-xs text-red-700">{error}</p>
@@ -251,7 +275,7 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
           </button>
         </div>
       </div>
-      
+
       {showSettings && (
         <div className="mt-4 pt-4 border-t border-green-200">
           <div className="space-y-4">
@@ -276,7 +300,7 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
                 </li>
               </ul>
             </div>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 onClick={openBrowserSettings}
@@ -293,7 +317,7 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
                 Verificar status
               </button>
             </div>
-            
+
             <div className="text-xs text-gray-500 pt-2 border-t border-gray-100">
               <p>
                 <span className="font-medium">Dica:</span> Mantenha esta janela aberta para receber notificações mesmo quando estiver em outras abas.
