@@ -1,3 +1,4 @@
-// types/index.ts
+// types/index.ts - ATUALIZAR
 export * from './auth';
 export * from './schedule';
+export * from './notification';
