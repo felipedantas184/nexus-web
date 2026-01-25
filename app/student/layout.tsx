@@ -12,7 +12,7 @@ export default function StudentLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <ProtectedRoute allowedRoles={['student']}>

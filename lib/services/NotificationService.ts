@@ -292,21 +292,117 @@ export class NotificationService {
     }
   }
 
-  // 6. VERIFICAR STATUS DAS NOTIFICAÇÕES
+  // 12. DETECTAR iOS
+  static isIOS(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    return /iphone|ipad|ipod/.test(userAgent);
+  }
+
+  // 13. VERIFICAR SUPORTE iOS
+  static checkIOSSupport(): {
+    safari: boolean;
+    standalone: boolean;
+    notifications: boolean;
+    instructions: string[];
+  } {
+    const isIOS = this.isIOS();
+    const isStandalone = (window.navigator as any).standalone === true;
+
+    const result = {
+      safari: isIOS && /^((?!chrome|android).)*safari/i.test(navigator.userAgent),
+      standalone: isStandalone,
+      notifications: 'Notification' in window,
+      instructions: [] as string[]
+    };
+
+    // Instruções para iOS
+    if (isIOS) {
+      if (!isStandalone) {
+        result.instructions.push(
+          '📱 Para notificações no iOS:',
+          '1. Clique no botão de compartilhar (📤)',
+          '2. Role para baixo e selecione "Adicionar à Tela Inicial"',
+          '3. Abra o app a partir do ícone na sua tela',
+          '4. Ative as notificações quando solicitado'
+        );
+      }
+
+      if (!result.notifications) {
+        result.instructions.push(
+          '🔕 Notificações push não são totalmente suportadas no iOS Safari',
+          'Use o app instalado (adicionado à tela inicial) para melhor experiência'
+        );
+      }
+    }
+
+    return result;
+  }
+
+  // 14. MÉTODO DE TESTE ESPECÍFICO PARA iOS
+  static async testIOSNotification(): Promise<boolean> {
+    try {
+      const iosInfo = this.checkIOSSupport();
+      console.log('iOS Info:', iosInfo);
+
+      // iOS requer que o site seja aberto como PWA (standalone)
+      if (this.isIOS() && !iosInfo.standalone) {
+        console.warn('⚠️ iOS: Site não está em modo standalone (PWA)');
+        // Podemos mostrar notificação local mesmo assim
+      }
+
+      // iOS tem suporte limitado, mas podemos tentar
+      if (Notification.permission === 'granted') {
+        return await this.sendLocalNotification(
+          '📱 Teste iOS',
+          'Notificação de teste no iPhone/iPad',
+          {
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/badge-72x72.png',
+            requireInteraction: false,
+            silent: true // iOS pode preferir notificações silenciosas
+          }
+        );
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Erro no teste iOS:', error);
+      return false;
+    }
+  }
+
+  // 15. ATUALIZAR checkNotificationSupport PARA INCLUIR iOS
   static async checkNotificationSupport(): Promise<{
     supported: boolean;
     permission: NotificationPermission;
     serviceWorker: boolean;
+    isIOS?: boolean;
+    iosStandalone?: boolean;
+    iosInstructions?: string[];
   }> {
     const supported = 'Notification' in window;
     const permission = supported ? Notification.permission : 'denied';
     const serviceWorker = 'serviceWorker' in navigator;
+    const isIOS = this.isIOS();
 
-    return {
+    const result: any = {
       supported,
       permission,
       serviceWorker
     };
+
+    if (isIOS) {
+      const iosInfo = this.checkIOSSupport();
+      result.isIOS = true;
+      result.iosStandalone = iosInfo.standalone;
+      result.iosInstructions = iosInfo.instructions;
+      // iOS tem suporte limitado, mas consideramos "suportado" para mostrar UI
+      result.supported = true; // Mostrar UI mesmo com limitações
+    }
+
+    return result;
   }
 
   // 7. OBTER PREFERÊNCIAS DO USUÁRIO (MANTIDO)

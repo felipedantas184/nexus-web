@@ -11,7 +11,7 @@ export default function ProfessionalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <ProtectedRoute allowedRoles={['psychologist', 'psychiatrist', 'monitor', 'coordinator']}>

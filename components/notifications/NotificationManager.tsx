@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationService } from '@/lib/services/NotificationService';
 import { FaBell, FaBellSlash, FaCog, FaInfoCircle } from 'react-icons/fa';
+import IOSInstructions from './IOSInstructions'; // Adicionar import
 
 export default function NotificationManager() {
   const { user } = useAuth();
@@ -17,6 +18,11 @@ export default function NotificationManager() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showIOSModal, setShowIOSModal] = useState(false);
+
+  const showIOSInstructions = () => {
+    setShowIOSModal(true);
+  };
 
   useEffect(() => {
     if (user) {
@@ -151,8 +157,48 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
     return null;
   }
 
+  // 🔧 CORREÇÃO PARA iOS: Verificar suporte real
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isIOSChrome = isIOS && /CriOS/.test(navigator.userAgent);
+  const isIOSFirefox = isIOS && /FxiOS/.test(navigator.userAgent);
+
+  // Se for iOS, verificar suporte específico
+  if (isIOS) {
+    const iosSupported =
+      ('Notification' in window) &&
+      ('serviceWorker' in navigator) &&
+      (Notification.permission !== 'denied');
+
+    if (!iosSupported) {
+      return (
+        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center gap-3">
+            <FaInfoCircle className="w-5 h-5 text-yellow-600" />
+            <div>
+              <p className="text-sm text-yellow-800 font-medium">
+                iOS - Instruções Especiais
+              </p>
+              <p className="text-xs text-yellow-600 mt-1">
+                1. Adicione este site à tela inicial
+                2. Abra a partir do ícone na tela
+                3. Ative as notificações
+              </p>
+              <button
+                onClick={() => showIOSInstructions()}
+                className="mt-2 text-xs text-blue-600 hover:text-blue-800"
+              >
+                Ver instruções detalhadas
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
+
   // Se não suporta notificações
-  if (!notificationStatus.supported) {
+  if (!notificationStatus.supported && !isIOS) {
     return (
       <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <div className="flex items-center gap-3">
