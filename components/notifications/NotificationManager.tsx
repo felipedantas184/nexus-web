@@ -1,11 +1,11 @@
-// components/notifications/NotificationManager.tsx - CORRIGIDO FINAL
+// components/notifications/NotificationManager.tsx - VERSÃO COMPLETA CORRIGIDA
 'use client';
 
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationService } from '@/lib/services/NotificationService';
-import { FaBell, FaBellSlash, FaCog, FaInfoCircle } from 'react-icons/fa';
-import IOSInstructions from './IOSInstructions'; // Adicionar import
+import { FaBell, FaBellSlash, FaCog, FaInfoCircle, FaApple } from 'react-icons/fa';
+import IOSInstructions from './IOSInstructions'; // Certifique-se de criar este componente
 
 export default function NotificationManager() {
   const { user } = useAuth();
@@ -13,12 +13,19 @@ export default function NotificationManager() {
     supported: boolean;
     permission: NotificationPermission;
     serviceWorker: boolean;
+    isIOS?: boolean;
+    iosStandalone?: boolean;
+    iosInstructions?: string[];
   } | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showIOSModal, setShowIOSModal] = useState(false);
+
+  // DETECTAR iOS
+  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isStandalone = (window.navigator as any).standalone === true;
 
   const showIOSInstructions = () => {
     setShowIOSModal(true);
@@ -36,6 +43,17 @@ export default function NotificationManager() {
   };
 
   const requestPermission = async () => {
+    // iOS requer tratamento especial
+    if (isIOSDevice) {
+      alert(
+        'No iOS, é melhor:\n\n' +
+        '1. Adicionar este site à tela inicial\n' +
+        '2. Abrir a partir do ícone instalado\n' +
+        '3. Ativar notificações no app instalado'
+      );
+      return;
+    }
+
     if (!notificationStatus?.supported) return;
 
     setIsLoading(true);
@@ -65,7 +83,6 @@ export default function NotificationManager() {
   };
 
   const showSuccessMessage = () => {
-    // Pode ser um toast ou mensagem temporária
     console.log('Notificações ativadas com sucesso!');
   };
 
@@ -118,17 +135,29 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
     try {
       setIsLoading(true);
 
-      // Feedback visual
-      console.log('Iniciando teste no mobile...');
+      console.log('Iniciando teste de notificação...');
+
+      // iOS requer tratamento especial
+      if (isIOSDevice && !isStandalone) {
+        const shouldContinue = confirm(
+          'Para melhor experiência no iOS:\n\n' +
+          '1. Adicione este site à tela inicial\n' +
+          '2. Abra a partir do ícone instalado\n' +
+          '3. Teste novamente\n\n' +
+          'Deseja testar mesmo assim?'
+        );
+        
+        if (!shouldContinue) {
+          setIsLoading(false);
+          return;
+        }
+      }
 
       const success = await NotificationService.testNotification();
 
       if (success) {
-        // Feedback no mobile
-        alert('✅ Notificação enviada!\n\nSe não aparecer:\n1. Verifique se o som está ligado\n2. Veja a barra de notificações\n3. O ícone pode aparecer pequeno');
-
-        // Log adicional
-        console.log('✅ Teste bem-sucedido no mobile');
+        alert('✅ Notificação enviada!\n\nSe não aparecer:\n1. Verifique barra de notificações\n2. Veja se o som está ligado\n3. Recarregue a página');
+        console.log('✅ Teste bem-sucedido');
       } else {
         // Diagnosticar problema
         const status = await NotificationService.checkNotificationSupport();
@@ -141,13 +170,23 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
         if (status.permission !== 'granted') {
           errorMsg += '\n• Permissão não concedida';
         }
+        if (isIOSDevice) {
+          errorMsg += '\n• iOS tem limitações de notificações';
+        }
 
-        alert(`❌ ${errorMsg}\n\nTente:\n1. Recarregar a página\n2. Limpar cache do navegador\n3. Verificar configurações do site`);
+        alert(`❌ ${errorMsg}\n\nTente:\n1. Recarregar a página\n2. Limpar cache\n3. Verificar configurações`);
       }
 
     } catch (err: any) {
-      console.error('Erro no teste mobile:', err);
-      alert(`Erro: ${err.message || 'Desconhecido'}\n\nTente em "Site para computador"`);
+      console.error('Erro no teste:', err);
+      
+      let errorMessage = err.message || 'Erro desconhecido';
+      
+      if (isIOSDevice) {
+        errorMessage += '\n\n💡 No iOS, adicione o site à tela inicial para melhor experiência.';
+      }
+      
+      alert(`Erro: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
@@ -157,48 +196,140 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
     return null;
   }
 
-  // 🔧 CORREÇÃO PARA iOS: Verificar suporte real
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  const isIOSChrome = isIOS && /CriOS/.test(navigator.userAgent);
-  const isIOSFirefox = isIOS && /FxiOS/.test(navigator.userAgent);
-
-  // Se for iOS, verificar suporte específico
-  if (isIOS) {
-    const iosSupported =
-      ('Notification' in window) &&
-      ('serviceWorker' in navigator) &&
-      (Notification.permission !== 'denied');
-
-    if (!iosSupported) {
+  // ========== LÓGICA ESPECÍFICA PARA iOS ==========
+  if (isIOSDevice) {
+    // iOS não instalado como PWA
+    if (!isStandalone) {
       return (
-        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex items-center gap-3">
-            <FaInfoCircle className="w-5 h-5 text-yellow-600" />
-            <div>
-              <p className="text-sm text-yellow-800 font-medium">
-                iOS - Instruções Especiais
-              </p>
-              <p className="text-xs text-yellow-600 mt-1">
-                1. Adicione este site à tela inicial
-                2. Abra a partir do ícone na tela
-                3. Ative as notificações
-              </p>
-              <button
-                onClick={() => showIOSInstructions()}
-                className="mt-2 text-xs text-blue-600 hover:text-blue-800"
-              >
-                Ver instruções detalhadas
-              </button>
+        <>
+          <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg mb-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-100 to-pink-200 flex items-center justify-center">
+                <FaApple className="w-5 h-5 text-purple-600" />
+              </div>
+              
+              <div className="flex-1">
+                <p className="text-sm font-medium text-purple-800 mb-1">
+                  iPhone/iPad - Instruções Especiais
+                </p>
+                <p className="text-xs text-purple-600 mb-3">
+                  Para melhor experiência com notificações no iOS
+                </p>
+                
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-purple-700">1</span>
+                    </div>
+                    <p className="text-xs text-purple-700">
+                      Toque no botão de compartilhar (📤)
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-purple-700">2</span>
+                    </div>
+                    <p className="text-xs text-purple-700">
+                      Selecione "Adicionar à Tela Inicial"
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-purple-700">3</span>
+                    </div>
+                    <p className="text-xs text-purple-700">
+                      Abra a partir do ícone na tela inicial
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (Notification.permission === 'default') {
+                        NotificationService.requestNotificationPermission();
+                      } else {
+                        testNotification();
+                      }
+                    }}
+                    className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  >
+                    {Notification.permission === 'default' ? 'Ativar' : 'Testar'}
+                  </button>
+                  
+                  <button
+                    onClick={showIOSInstructions}
+                    className="px-3 py-1.5 text-sm bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50"
+                  >
+                    Mais detalhes
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+          
+          {showIOSModal && <IOSInstructions onClose={() => setShowIOSModal(false)} />}
+        </>
       );
     }
+    
+    // iOS instalado como PWA (standalone)
+    return (
+      <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center">
+              <FaApple className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-green-800 font-medium">
+                iOS App Instalado ✓
+              </p>
+              <p className="text-xs text-green-600">
+                Abra sempre a partir do ícone na tela inicial
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={testNotification}
+              disabled={isLoading}
+              className="px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 disabled:opacity-50"
+              title="Testar notificação"
+            >
+              {isLoading ? 'Testando...' : 'Testar'}
+            </button>
+            
+            {notificationStatus.permission === 'default' && (
+              <button
+                onClick={requestPermission}
+                className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Ativar
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {notificationStatus.permission === 'denied' && (
+          <div className="mt-3 p-2 bg-red-50 border border-red-100 rounded">
+            <p className="text-xs text-red-700">
+              Notificações bloqueadas no iOS. Acesse:
+              Ajustes → Safari → Notificações
+            </p>
+          </div>
+        )}
+      </div>
+    );
   }
 
-  // Se não suporta notificações
-  if (!notificationStatus.supported && !isIOS) {
+  // ========== LÓGICA PARA ANDROID/DESKTOP ==========
+  
+  // Se não suporta notificações (não iOS)
+  if (!notificationStatus.supported) {
     return (
       <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <div className="flex items-center gap-3">
@@ -208,7 +339,7 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
               Navegador não compatível
             </p>
             <p className="text-xs text-yellow-600 mt-1">
-              Use Chrome, Firefox, Safari ou Edge para receber lembretes.
+              Use Chrome, Firefox ou Edge para receber lembretes.
             </p>
           </div>
         </div>
@@ -287,7 +418,7 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
     );
   }
 
-  // Se permissão concedida
+  // Se permissão concedida (Android/Desktop funcionando)
   return (
     <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg shadow-sm">
       <div className="flex items-center justify-between">
@@ -307,10 +438,11 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
         <div className="flex items-center gap-2">
           <button
             onClick={testNotification}
-            className="px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors"
+            disabled={isLoading}
+            className="px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
             title="Testar notificação"
           >
-            Testar
+            {isLoading ? 'Testando...' : 'Testar'}
           </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
