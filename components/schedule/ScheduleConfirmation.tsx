@@ -2,9 +2,9 @@
 
 import React, { useState } from 'react';
 import { CreateScheduleDTO } from '@/types/schedule';
-import { 
-  FaSave, 
-  FaTimes, 
+import {
+  FaSave,
+  FaTimes,
   FaCheckCircle,
   FaExclamationTriangle,
   FaCalendarAlt,
@@ -32,10 +32,10 @@ export default function ScheduleConfirmation({
 
   // Calcular estatísticas
   const totalActivities = formData.activities.length;
-  const totalDuration = formData.activities.reduce((sum, act) => 
+  const totalDuration = formData.activities.reduce((sum, act) =>
     sum + (act.metadata.estimatedDuration || 0), 0
   );
-  const totalPoints = formData.activities.reduce((sum, act) => 
+  const totalPoints = formData.activities.reduce((sum, act) =>
     sum + (act.scoring.pointsOnCompletion || 0), 0
   );
   const requiredActivities = formData.activities.filter(act => act.scoring.isRequired).length;
@@ -45,13 +45,13 @@ export default function ScheduleConfirmation({
     hasName: formData.name.trim().length > 0,
     hasActiveDays: formData.activeDays.length > 0,
     hasActivities: totalActivities > 0,
-    hasStartDate: formData.startDate >= new Date()
+    hasStartDate: new Date(formData.startDate).setHours(0, 0, 0, 0) >= new Date().setHours(0, 0, 0, 0)
   };
 
   const isValid = Object.values(validations).every(v => v);
 
   const dayLabels: Record<number, string> = {
-    0: 'Dom', 1: 'Seg', 2: 'Ter', 3: 'Qua', 
+    0: 'Dom', 1: 'Seg', 2: 'Ter', 3: 'Qua',
     4: 'Qui', 5: 'Sex', 6: 'Sáb'
   };
 
@@ -60,7 +60,7 @@ export default function ScheduleConfirmation({
       setShowValidation(true);
       return;
     }
-    
+
     await onSubmit();
   };
 
@@ -70,11 +70,10 @@ export default function ScheduleConfirmation({
       <div className="bg-gradient-to-r from-gray-50 to-white p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-xl ${
-              isValid 
-                ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+            <div className={`p-3 rounded-xl ${isValid
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600'
                 : 'bg-gradient-to-r from-amber-500 to-orange-600'
-            }`}>
+              }`}>
               <FaCheckCircle className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -82,19 +81,18 @@ export default function ScheduleConfirmation({
                 Confirmação do Cronograma
               </h2>
               <p className="text-gray-600 text-sm">
-                {isValid 
-                  ? 'Tudo pronto! Revise e salve seu cronograma' 
+                {isValid
+                  ? 'Tudo pronto! Revise e salve seu cronograma'
                   : 'Complete as informações necessárias antes de salvar'}
               </p>
             </div>
           </div>
-          
+
           {/* Status */}
-          <div className={`px-4 py-2 rounded-full text-sm font-medium ${
-            isValid 
-              ? 'bg-green-100 text-green-800' 
+          <div className={`px-4 py-2 rounded-full text-sm font-medium ${isValid
+              ? 'bg-green-100 text-green-800'
               : 'bg-amber-100 text-amber-800'
-          }`}>
+            }`}>
             {isValid ? 'Pronto para salvar' : 'Aguardando informações'}
           </div>
         </div>
@@ -106,7 +104,7 @@ export default function ScheduleConfirmation({
           {/* Coluna 1: Resumo */}
           <div className="space-y-6">
             <h3 className="text-lg font-semibold text-gray-800">Resumo do Cronograma</h3>
-            
+
             <div className="space-y-4">
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
@@ -159,7 +157,7 @@ export default function ScheduleConfirmation({
               <h4 className="text-sm font-medium text-gray-700 mb-3">Dias Ativos</h4>
               <div className="flex flex-wrap gap-2">
                 {formData.activeDays.map(dayId => (
-                  <div 
+                  <div
                     key={dayId}
                     className="px-3 py-1.5 bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 rounded-lg font-medium"
                   >
@@ -173,91 +171,83 @@ export default function ScheduleConfirmation({
           {/* Coluna 2: Validações e Ações */}
           <div className="space-y-6">
             <h3 className="text-lg font-semibold text-gray-800">Validações</h3>
-            
+
             <div className="space-y-3">
-              <div className={`flex items-center gap-3 p-3 rounded-lg ${
-                validations.hasName 
-                  ? 'bg-green-50 border border-green-200' 
+              <div className={`flex items-center gap-3 p-3 rounded-lg ${validations.hasName
+                  ? 'bg-green-50 border border-green-200'
                   : 'bg-amber-50 border border-amber-200'
-              }`}>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                  validations.hasName 
-                    ? 'bg-green-100 text-green-600' 
-                    : 'bg-amber-100 text-amber-600'
                 }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${validations.hasName
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-amber-100 text-amber-600'
+                  }`}>
                   {validations.hasName ? '✓' : '!'}
                 </div>
                 <div className="flex-1">
                   <div className="font-medium text-gray-800">Nome do cronograma</div>
                   <div className="text-sm text-gray-500">
-                    {validations.hasName 
-                      ? `"${formData.name}"` 
+                    {validations.hasName
+                      ? `"${formData.name}"`
                       : 'Um nome é obrigatório'}
                   </div>
                 </div>
               </div>
 
-              <div className={`flex items-center gap-3 p-3 rounded-lg ${
-                validations.hasActiveDays 
-                  ? 'bg-green-50 border border-green-200' 
+              <div className={`flex items-center gap-3 p-3 rounded-lg ${validations.hasActiveDays
+                  ? 'bg-green-50 border border-green-200'
                   : 'bg-amber-50 border border-amber-200'
-              }`}>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                  validations.hasActiveDays 
-                    ? 'bg-green-100 text-green-600' 
-                    : 'bg-amber-100 text-amber-600'
                 }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${validations.hasActiveDays
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-amber-100 text-amber-600'
+                  }`}>
                   {validations.hasActiveDays ? '✓' : '!'}
                 </div>
                 <div className="flex-1">
                   <div className="font-medium text-gray-800">Dias da semana</div>
                   <div className="text-sm text-gray-500">
-                    {validations.hasActiveDays 
-                      ? `${formData.activeDays.length} dia${formData.activeDays.length !== 1 ? 's' : ''} selecionado${formData.activeDays.length !== 1 ? 's' : ''}` 
+                    {validations.hasActiveDays
+                      ? `${formData.activeDays.length} dia${formData.activeDays.length !== 1 ? 's' : ''} selecionado${formData.activeDays.length !== 1 ? 's' : ''}`
                       : 'Selecione pelo menos um dia'}
                   </div>
                 </div>
               </div>
 
-              <div className={`flex items-center gap-3 p-3 rounded-lg ${
-                validations.hasActivities 
-                  ? 'bg-green-50 border border-green-200' 
+              <div className={`flex items-center gap-3 p-3 rounded-lg ${validations.hasActivities
+                  ? 'bg-green-50 border border-green-200'
                   : 'bg-amber-50 border border-amber-200'
-              }`}>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                  validations.hasActivities 
-                    ? 'bg-green-100 text-green-600' 
-                    : 'bg-amber-100 text-amber-600'
                 }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${validations.hasActivities
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-amber-100 text-amber-600'
+                  }`}>
                   {validations.hasActivities ? '✓' : '!'}
                 </div>
                 <div className="flex-1">
                   <div className="font-medium text-gray-800">Atividades adicionadas</div>
                   <div className="text-sm text-gray-500">
-                    {validations.hasActivities 
-                      ? `${totalActivities} atividade${totalActivities !== 1 ? 's' : ''} configurada${totalActivities !== 1 ? 's' : ''}` 
+                    {validations.hasActivities
+                      ? `${totalActivities} atividade${totalActivities !== 1 ? 's' : ''} configurada${totalActivities !== 1 ? 's' : ''}`
                       : 'Adicione pelo menos uma atividade'}
                   </div>
                 </div>
               </div>
 
-              <div className={`flex items-center gap-3 p-3 rounded-lg ${
-                validations.hasStartDate 
-                  ? 'bg-green-50 border border-green-200' 
+              <div className={`flex items-center gap-3 p-3 rounded-lg ${validations.hasStartDate
+                  ? 'bg-green-50 border border-green-200'
                   : 'bg-amber-50 border border-amber-200'
-              }`}>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-                  validations.hasStartDate 
-                    ? 'bg-green-100 text-green-600' 
-                    : 'bg-amber-100 text-amber-600'
                 }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${validations.hasStartDate
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-amber-100 text-amber-600'
+                  }`}>
                   {validations.hasStartDate ? '✓' : '!'}
                 </div>
                 <div className="flex-1">
                   <div className="font-medium text-gray-800">Data de início</div>
                   <div className="text-sm text-gray-500">
-                    {validations.hasStartDate 
-                      ? formData.startDate.toLocaleDateString('pt-BR') 
+                    {validations.hasStartDate
+                      ? formData.startDate.toLocaleDateString('pt-BR')
                       : 'Data deve ser hoje ou futura'}
                   </div>
                 </div>
@@ -294,16 +284,15 @@ export default function ScheduleConfirmation({
                     Cancelar
                   </button>
                 )}
-                
+
                 <button
                   type="button"
                   onClick={handleSubmit}
                   disabled={isSubmitting || !isValid}
-                  className={`px-8 py-3 font-medium rounded-xl transition-all shadow hover:shadow-lg flex items-center justify-center gap-2 flex-1 ${
-                    isValid
+                  className={`px-8 py-3 font-medium rounded-xl transition-all shadow hover:shadow-lg flex items-center justify-center gap-2 flex-1 ${isValid
                       ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700'
                       : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                  } ${!onCancel ? 'col-span-2' : ''}`}
+                    } ${!onCancel ? 'col-span-2' : ''}`}
                 >
                   {isSubmitting ? (
                     <>

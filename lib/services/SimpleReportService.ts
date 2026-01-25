@@ -269,8 +269,6 @@ export class SimpleReportService {
       const q = query(
         collection(firestore, this.COLLECTIONS.PROGRESS),
         where('studentId', '==', studentId),
-        where('isActive', '==', true),
-        where('scheduledDate', '>=', Timestamp.fromDate(eightWeeksAgo)),
         orderBy('scheduledDate', 'desc'),
         limit(200) // Limite razoável para MVP
       );

@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  CreateActivityDTO, 
-  ActivityType, 
+import {
+  CreateActivityDTO,
+  ActivityType,
   DifficultyLevel,
   CreateScheduleDTO,
   ActivityConfig
@@ -44,62 +44,62 @@ const activityTypes: Array<{
   color: string;
   description: string;
 }> = [
-  {
-    type: 'quick',
-    icon: '⚡',
-    label: 'Rápida',
-    color: 'bg-blue-500',
-    description: 'Atividade simples sem detalhes'
-  },
-  {
-    type: 'text',
-    icon: <FaFileAlt />,
-    label: 'Texto',
-    color: 'bg-purple-500',
-    description: 'Resposta escrita'
-  },
-  {
-    type: 'quiz',
-    icon: <FaQuestionCircle />,
-    label: 'Quiz',
-    color: 'bg-amber-500',
-    description: 'Perguntas e respostas'
-  },
-  {
-    type: 'video',
-    icon: <FaVideo />,
-    label: 'Vídeo',
-    color: 'bg-red-500',
-    description: 'Assistir conteúdo em vídeo'
-  },
-  {
-    type: 'checklist',
-    icon: <FaList />,
-    label: 'Checklist',
-    color: 'bg-green-500',
-    description: 'Lista de itens para marcar'
-  },
-  {
-    type: 'file',
-    icon: <FaFile />,
-    label: 'Arquivo',
-    color: 'bg-indigo-500',
-    description: 'Upload de arquivos'
-  }
-];
+    {
+      type: 'quick',
+      icon: '⚡',
+      label: 'Rápida',
+      color: 'bg-blue-500',
+      description: 'Atividade simples sem detalhes'
+    },
+    {
+      type: 'text',
+      icon: <FaFileAlt />,
+      label: 'Texto',
+      color: 'bg-purple-500',
+      description: 'Resposta escrita'
+    },
+    {
+      type: 'quiz',
+      icon: <FaQuestionCircle />,
+      label: 'Quiz',
+      color: 'bg-amber-500',
+      description: 'Perguntas e respostas'
+    },
+    {
+      type: 'video',
+      icon: <FaVideo />,
+      label: 'Vídeo',
+      color: 'bg-red-500',
+      description: 'Assistir conteúdo em vídeo'
+    },
+    {
+      type: 'checklist',
+      icon: <FaList />,
+      label: 'Checklist',
+      color: 'bg-green-500',
+      description: 'Lista de itens para marcar'
+    },
+    {
+      type: 'file',
+      icon: <FaFile />,
+      label: 'Arquivo',
+      color: 'bg-indigo-500',
+      description: 'Upload de arquivos'
+    }
+  ];
 
 const difficultyOptions: Array<{
   value: DifficultyLevel;
   label: string;
   color: string;
 }> = [
-  { value: 'easy', label: 'Fácil', color: 'bg-green-100 text-green-800' },
-  { value: 'medium', label: 'Médio', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'hard', label: 'Difícil', color: 'bg-red-100 text-red-800' }
-];
+    { value: 'easy', label: 'Fácil', color: 'bg-green-100 text-green-800' },
+    { value: 'medium', label: 'Médio', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'hard', label: 'Difícil', color: 'bg-red-100 text-red-800' }
+  ];
 
 const dayLabels: Record<number, string> = {
-  0: 'Dom', 1: 'Seg', 2: 'Ter', 3: 'Qua', 
+  0: 'Dom', 1: 'Seg', 2: 'Ter', 3: 'Qua',
   4: 'Qui', 5: 'Sex', 6: 'Sáb'
 };
 
@@ -113,7 +113,7 @@ export default function QuickActivityModal({
   availableDays,
   formData
 }: QuickActivityModalProps) {
-  const [selectedType, setSelectedType] = useState<ActivityType>('text');
+  const [selectedType, setSelectedType] = useState<ActivityType>('quick');
   const [repeatDays, setRepeatDays] = useState<number[]>([initialDay]);
   const [form, setForm] = useState<Partial<CreateActivityDTO>>({
     title: '',
@@ -150,6 +150,23 @@ export default function QuickActivityModal({
       setSelectedType(initialData.type);
     }
   }, [initialData]);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Previne scroll do body
+      document.body.style.overflow = 'hidden';
+
+      // Foca no título quando abre
+      setTimeout(() => {
+        const titleInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+        titleInput?.focus();
+      }, 100);
+
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [isOpen]);
 
   const toggleRepeatDay = (day: number) => {
     setRepeatDays(prev =>
@@ -249,13 +266,13 @@ export default function QuickActivityModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div 
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-8"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6">
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-8">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold text-white">
@@ -275,10 +292,10 @@ export default function QuickActivityModal({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-80px)]">
-          <div className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="overflow-y-auto">
+          <div className="p-8 space-y-8">
             {/* Seção 1: Tipo e Repetição */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Tipo de Atividade */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -290,11 +307,10 @@ export default function QuickActivityModal({
                       key={type.type}
                       type="button"
                       onClick={() => setSelectedType(type.type)}
-                      className={`p-3 rounded-xl border-2 transition-all ${
-                        selectedType === type.type
-                          ? 'border-indigo-500 bg-indigo-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className={`p-3 rounded-xl border-2 transition-all ${selectedType === type.type
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <div className="flex flex-col items-center gap-2">
                         <div className={`w-10 h-10 rounded-full ${type.color} flex items-center justify-center text-white`}>
@@ -320,11 +336,10 @@ export default function QuickActivityModal({
                       key={day}
                       type="button"
                       onClick={() => toggleRepeatDay(day)}
-                      className={`p-2 rounded-lg font-medium transition-all ${
-                        repeatDays.includes(day)
-                          ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
+                      className={`p-2 rounded-lg font-medium transition-all ${repeatDays.includes(day)
+                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
                     >
                       <div className="flex items-center justify-center gap-1">
                         {dayLabels[day]}
@@ -342,99 +357,153 @@ export default function QuickActivityModal({
             </div>
 
             {/* Seção 2: Informações Básicas */}
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Título *
+            <div className="space-y-8">
+              {/* Linha 1: Título e Dificuldade */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Título */}
+                <div className="space-y-3">
+                  <label className="block text-base font-semibold text-gray-900">
+                    Título da Atividade *
                   </label>
-                  <input
-                    type="text"
-                    value={form.title || ''}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="Ex: Meditação Guiada"
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={form.title || ''}
+                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      className="w-full px-4 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-gray-400 text-gray-900 bg-white"
+                      placeholder="Ex: Meditação Guiada"
+                      required
+                    />
+                    <div className="absolute right-3 top-3.5">
+                      <span className="text-sm text-gray-400">
+                        {form.title?.length || 0}/60
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dificuldade */}
+                <div className="space-y-3">
+                  <label className="block text-base font-semibold text-gray-900">
+                    Nível de Dificuldade
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {difficultyOptions.map(diff => {
+                      const isSelected = (form.metadata?.difficulty || 'medium') === diff.value;
+                      return (
+                        <button
+                          key={diff.value}
+                          type="button"
+                          onClick={() => setForm({
+                            ...form,
+                            metadata: { ...form.metadata!, difficulty: diff.value }
+                          })}
+                          className={`px-4 py-3 rounded-xl border transition-all duration-200 ${isSelected
+                            ? `${diff.value === 'easy' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-100' :
+                              diff.value === 'medium' ? 'border-amber-200 bg-amber-50 text-amber-700 ring-2 ring-amber-100' :
+                                'border-rose-200 bg-rose-50 text-rose-700 ring-2 ring-rose-100'} font-semibold`
+                            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-sm">{diff.label}</span>
+                            <div className={`w-6 h-1 rounded-full ${diff.value === 'easy' ? 'bg-emerald-300' :
+                              diff.value === 'medium' ? 'bg-amber-300' :
+                                'bg-rose-300'
+                              }`} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Descrição 
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-base font-semibold text-gray-900">
+                    Descrição (Opcional)
+                  </label>
+                  <span className="text-sm text-gray-400">
+                    {form.description?.length || 0}/200
+                  </span>
+                </div>
+                <div className="relative">
+                  <textarea
+                    value={form.description || ''}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    className="w-full px-4 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-gray-400 text-gray-900 bg-white resize-none"
+                    placeholder="Forneça contexto adicional sobre a atividade. O aluno verá esta descrição antes de começar."
+                    rows={3}
+                  />
+                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-xs text-gray-400">Shift + Enter para nova linha</span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Contextualize a atividade para melhor engajamento
+                </p>
+              </div>*/}
+
+              {/* Instruções */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-base font-semibold text-gray-900">
+                    Instruções para o Aluno *
+                  </label>
+                  <span className="text-sm text-gray-400">
+                    {form.instructions?.length || 0}/500
+                  </span>
+                </div>
+                <div className="relative">
+                  <div className="absolute left-4 top-4 text-gray-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <textarea
+                    value={form.instructions || ''}
+                    onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+                    className="w-full pl-12 pr-4 py-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-gray-400 text-gray-900 bg-white"
+                    placeholder="Descreva passo a passo o que o aluno precisa fazer. Seja claro e específico."
+                    rows={4}
                     required
                   />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Dificuldade
-                  </label>
-                  <select
-                    value={form.metadata?.difficulty || 'medium'}
-                    onChange={(e) => setForm({
-                      ...form,
-                      metadata: { ...form.metadata!, difficulty: e.target.value as DifficultyLevel }
-                    })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-                  >
-                    {difficultyOptions.map(diff => (
-                      <option key={diff.value} value={diff.value}>
-                        {diff.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descrição (opcional)
-                </label>
-                <textarea
-                  value={form.description || ''}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Descreva a atividade..."
-                  rows={2}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Instruções *
-                </label>
-                <textarea
-                  value={form.instructions || ''}
-                  onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="O que o aluno deve fazer?"
-                  rows={3}
-                  required
-                />
               </div>
             </div>
 
             {/* Seção 3: Duração e Pontuação */}
+            {/* Versão Minimalista */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <div className="flex items-center gap-2">
-                    <FaClock className="w-4 h-4 text-gray-400" />
-                    Duração (min)
-                  </div>
+              {/* Duração Simples */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Duração (min)
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="240"
-                  value={form.metadata?.estimatedDuration || 15}
-                  onChange={(e) => setForm({
-                    ...form,
-                    metadata: { ...form.metadata!, estimatedDuration: parseInt(e.target.value) || 15 }
-                  })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    max="240"
+                    value={form.metadata?.estimatedDuration || 15}
+                    onChange={(e) => setForm({
+                      ...form,
+                      metadata: { ...form.metadata!, estimatedDuration: parseInt(e.target.value) || 15 }
+                    })}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 placeholder:text-gray-400 text-gray-900"
+                  />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">
+                    min
+                  </span>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <div className="flex items-center gap-2">
-                    <FaStar className="w-4 h-4 text-amber-400" />
-                    Pontos
-                  </div>
+              {/* Pontos Simples */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Pontos
                 </label>
                 <input
                   type="number"
@@ -445,25 +514,43 @@ export default function QuickActivityModal({
                     ...form,
                     scoring: { ...form.scoring!, pointsOnCompletion: parseInt(e.target.value) || 10 }
                   })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 placeholder:text-gray-400 text-gray-900"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo de Conclusão
+              {/* Requisito Simples */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Tipo
                 </label>
-                <select
-                  value={form.scoring?.isRequired ? 'required' : 'optional'}
-                  onChange={(e) => setForm({
-                    ...form,
-                    scoring: { ...form.scoring!, isRequired: e.target.value === 'required' }
-                  })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-                >
-                  <option value="required">Obrigatória</option>
-                  <option value="optional">Opcional</option>
-                </select>
+                <div className="inline-flex rounded-lg border border-gray-200 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setForm({
+                      ...form,
+                      scoring: { ...form.scoring!, isRequired: true }
+                    })}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${form.scoring?.isRequired
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                  >
+                    Obrigatória
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({
+                      ...form,
+                      scoring: { ...form.scoring!, isRequired: false }
+                    })}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${!form.scoring?.isRequired
+                        ? 'bg-gray-200 text-gray-900'
+                        : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                  >
+                    Opcional
+                  </button>
+                </div>
               </div>
             </div>
 

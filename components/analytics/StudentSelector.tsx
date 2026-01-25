@@ -289,31 +289,10 @@ export default function StudentSelector({ onSelect }: StudentSelectorProps) {
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
                         {student.profile.school}
                       </span>
-                      {age && (
-                        <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                          {age} anos
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="text-center p-2 bg-gray-50 rounded-lg">
-                    <div className="text-sm text-gray-500">Pontos</div>
-                    <div className="text-lg font-bold text-gray-800">
-                      {student.profile.totalPoints || 0}
-                    </div>
-                  </div>
-
-                  <div className="text-center p-2 bg-gray-50 rounded-lg">
-                    <div className="text-sm text-gray-500">Streak</div>
-                    <div className="text-lg font-bold text-gray-800">
-                      {student.profile.streak || 0} dias
-                    </div>
-                  </div>
-                </div>
-
+                
                 <div className="flex justify-between items-center">
                   <div className="text-sm text-gray-500">
                     {student.profile.assignedProfessionals?.length || 0} profissionais

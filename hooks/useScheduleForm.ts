@@ -10,9 +10,9 @@ export function useScheduleForm() {
   const [formData, setFormData] = useState<CreateScheduleDTO>({
     name: '',
     description: '',
-    category: 'mixed',
+    category: 'educational',
     startDate: new Date(),
-    activeDays: [1, 2, 3, 4, 5], // Segunda a sexta
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
     repeatRules: {
       resetOnRepeat: true,
       maxRepetitions: undefined

@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { CreateScheduleDTO, CreateActivityDTO } from '@/types/schedule';
-import { 
-  FaPlus, 
-  FaEdit, 
-  FaTrash, 
+import {
+  FaPlus,
+  FaEdit,
+  FaTrash,
   FaCopy,
   FaClock,
   FaStar,
@@ -32,7 +32,7 @@ export default function WeekScheduleGrid({
   onDuplicateActivity,
   updateField
 }: WeekScheduleGridProps) {
-  
+
   const getActivityIcon = (type: string) => {
     const icons: Record<string, string> = {
       'quick': '⚡',
@@ -65,69 +65,49 @@ export default function WeekScheduleGrid({
 
   const getDayStats = (day: number) => {
     const activities = getActivitiesByDay(day);
-    const totalTime = activities.reduce((sum, act) => 
+    const totalTime = activities.reduce((sum, act) =>
       sum + (act.metadata.estimatedDuration || 0), 0
     );
-    const totalPoints = activities.reduce((sum, act) => 
+    const totalPoints = activities.reduce((sum, act) =>
       sum + (act.scoring.pointsOnCompletion || 0), 0
     );
     const requiredCount = activities.filter(act => act.scoring.isRequired).length;
-    
-    return { 
-      totalTime, 
-      totalPoints, 
+
+    return {
+      totalTime,
+      totalPoints,
       count: activities.length,
-      requiredCount 
+      requiredCount
     };
   };
 
   const dayLabels: Record<number, string> = {
-    0: 'Domingo', 1: 'Segunda', 2: 'Terça', 3: 'Quarta', 
+    0: 'Domingo', 1: 'Segunda', 2: 'Terça', 3: 'Quarta',
     4: 'Quinta', 5: 'Sexta', 6: 'Sábado'
   };
 
   return (
     <div className="space-y-6">
-      {/* Banner de Dicas */}
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-5">
-        <div className="flex items-start gap-4">
-          <div className="p-2 bg-indigo-100 rounded-lg">
-            <FaCheckCircle className="w-5 h-5 text-indigo-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-gray-800 mb-1">
-              Dicas para organizar seu cronograma
-            </h3>
-            <p className="text-sm text-gray-600">
-              💡 Clique no botão "+ Adicionar Atividade" em qualquer dia para começar. 
-              Você pode replicar atividades em vários dias de uma vez através do modal.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Grid de Dias - Layout Horizontal Expandido */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {daysOfWeek.map((day) => {
+        {([...daysOfWeek.slice(1), daysOfWeek[0]]).map((day) => {
           const activities = getActivitiesByDay(day.id);
           const stats = getDayStats(day.id);
           const hasActivities = activities.length > 0;
-          
+
           return (
-            <div 
+            <div
               key={day.id}
-              className={`bg-white rounded-xl shadow-sm border ${
-                hasActivities 
-                  ? 'border-gray-300 hover:border-indigo-300' 
+              className={`bg-white rounded-xl shadow-sm border ${hasActivities
+                  ? 'border-gray-300 hover:border-indigo-300'
                   : 'border-gray-200 hover:border-gray-300'
-              } transition-all duration-200`}
+                } transition-all duration-200`}
             >
               {/* Cabeçalho do Dia */}
-              <div className={`p-5 rounded-t-xl ${
-                hasActivities 
-                  ? 'bg-gradient-to-r from-gray-50 to-white' 
+              <div className={`p-5 rounded-t-xl ${hasActivities
+                  ? 'bg-gradient-to-r from-gray-50 to-white'
                   : 'bg-gray-50'
-              }`}>
+                }`}>
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <div className="flex items-center gap-3">
@@ -143,7 +123,7 @@ export default function WeekScheduleGrid({
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Estatísticas do Dia */}
                   <div className="flex flex-col items-end gap-2">
                     <div className="flex items-center gap-4">
@@ -171,11 +151,10 @@ export default function WeekScheduleGrid({
                 <button
                   type="button"
                   onClick={() => onAddActivity(day.id)}
-                  className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-3 ${
-                    hasActivities
+                  className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-3 ${hasActivities
                       ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-md'
                       : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-gray-200 hover:to-gray-300 border border-gray-300'
-                  }`}
+                    }`}
                 >
                   <FaPlus className="w-4 h-4" />
                   {hasActivities ? 'Adicionar Outra Atividade' : 'Adicionar Primeira Atividade'}
@@ -213,7 +192,7 @@ export default function WeekScheduleGrid({
                                     {activity.type === 'checklist' && 'Checklist'}
                                     {activity.type === 'file' && 'Arquivo'}
                                   </span>
-                                  
+
                                   {activity.scoring.isRequired && (
                                     <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full flex items-center gap-1">
                                       <FaExclamationCircle className="w-3 h-3" />
@@ -261,19 +240,18 @@ export default function WeekScheduleGrid({
                                 <FaClock className="w-3 h-3" />
                                 <span>{activity.metadata.estimatedDuration} min</span>
                               </div>
-                              
+
                               <div className="flex items-center gap-1">
                                 <FaStar className="w-3 h-3" />
                                 <span>{activity.scoring.pointsOnCompletion} pontos</span>
                               </div>
 
-                              <div className={`text-xs px-2 py-1 rounded-full ${
-                                activity.metadata.difficulty === 'easy' 
+                              <div className={`text-xs px-2 py-1 rounded-full ${activity.metadata.difficulty === 'easy'
                                   ? 'bg-green-100 text-green-800'
                                   : activity.metadata.difficulty === 'medium'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
                                 {activity.metadata.difficulty === 'easy' && 'Fácil'}
                                 {activity.metadata.difficulty === 'medium' && 'Médio'}
                                 {activity.metadata.difficulty === 'hard' && 'Difícil'}
@@ -322,54 +300,6 @@ export default function WeekScheduleGrid({
             </div>
           );
         })}
-      </div>
-
-      {/* Resumo Expandido */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Resumo Geral do Cronograma
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
-            <div className="text-sm text-blue-600 font-medium mb-1">Total de Atividades</div>
-            <div className="text-2xl font-bold text-blue-700">
-              {formData.activities.length}
-            </div>
-            <div className="text-xs text-blue-600 mt-1">
-              Distribuídas em {daysOfWeek.length} dias
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
-            <div className="text-sm text-green-600 font-medium mb-1">Tempo Total</div>
-            <div className="text-2xl font-bold text-green-700">
-              {(formData.activities.reduce((sum, act) => sum + (act.metadata.estimatedDuration || 0), 0) / 60).toFixed(1)}h
-            </div>
-            <div className="text-xs text-green-600 mt-1">
-              Média de {(formData.activities.reduce((sum, act) => sum + (act.metadata.estimatedDuration || 0), 0) / formData.activities.length).toFixed(1)}min por atividade
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-br from-amber-50 to-amber-100 p-4 rounded-xl border border-amber-200">
-            <div className="text-sm text-amber-600 font-medium mb-1">Pontos Totais</div>
-            <div className="text-2xl font-bold text-amber-700">
-              {formData.activities.reduce((sum, act) => sum + (act.scoring.pointsOnCompletion || 0), 0)}
-            </div>
-            <div className="text-xs text-amber-600 mt-1">
-              {formData.activities.filter(a => a.scoring.isRequired).length} obrigatórias
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl border border-purple-200">
-            <div className="text-sm text-purple-600 font-medium mb-1">Dias Ativos</div>
-            <div className="text-2xl font-bold text-purple-700">
-              {daysOfWeek.length}
-            </div>
-            <div className="text-xs text-purple-600 mt-1">
-              De {dayLabels[daysOfWeek[0]?.id] || ''} a {dayLabels[daysOfWeek[daysOfWeek.length - 1]?.id] || ''}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

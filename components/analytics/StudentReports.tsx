@@ -1,7 +1,7 @@
-// components/analytics/StudentReports.tsx - CORREÇÕES NO TOPO DO ARQUIVO
+// components/analytics/StudentReports.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FaUser,
   FaChartBar,
@@ -20,19 +20,47 @@ import {
   FaCalendarAlt,
   FaCheckCircle,
   FaRegClock,
-  FaUserGraduate
+  FaUserGraduate,
+  FaBrain,
+  FaHeart,
+  FaBook,
+  FaChartLine,
+  FaTrophy,
+  FaCalendarDay,
+  FaUsers,
+  FaArrowLeft,
+  FaEye,
+  FaEyeSlash
 } from "react-icons/fa";
 import { useAuth } from '@/context/AuthContext';
 import { SimpleReportService } from '@/lib/services/SimpleReportService';
 import { StudentService } from '@/lib/services/StudentService';
-import { Student } from '@/types/auth';
+import { Student, Professional } from '@/types/auth';
 import { StudentReport, WeeklyReportData } from '@/types/schedule';
-import { FaArrowTrendDown, FaArrowTrendUp } from 'react-icons/fa6';
+import { FaArrowRightArrowLeft, FaArrowTrendDown, FaArrowTrendUp } from 'react-icons/fa6';
 
 interface StudentReportsProps {
   studentId?: string;
   showHeader?: boolean;
   onBack?: () => void;
+}
+
+// Tipos auxiliares
+interface MetricCardProps {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: React.ReactNode;
+  color: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'indigo';
+  trend?: number;
+}
+
+interface DayPerformance {
+  dayName: string;
+  shortName: string;
+  completed: number;
+  total: number;
+  completionRate: number;
 }
 
 export default function StudentReports({
@@ -41,19 +69,19 @@ export default function StudentReports({
   onBack
 }: StudentReportsProps) {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false); // ⚠️ MUDADO: inicial false
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [report, setReport] = useState<StudentReport | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<number | 'all'>('all');
-  const [activeTab, setActiveTab] = useState<'overview' | 'weekly' | 'insights'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'weekly' | 'insights' | 'patterns'>('overview');
+  const [showEmotionalData, setShowEmotionalData] = useState(false);
 
   // Determinar ID do aluno
   const targetStudentId = studentId || (user?.role === 'student' ? user.id : null);
 
   // Carregar dados
-  useEffect(() => {
-    // ⚠️ CORREÇÃO CRÍTICA: Se não tem studentId, não carrega nada
+  const loadData = useCallback(async () => {
     if (!targetStudentId) {
       setLoading(false);
       setError(null);
@@ -62,95 +90,88 @@ export default function StudentReports({
       return;
     }
 
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-        // 1. Carregar dados do aluno
-        const studentData = await loadStudentData(targetStudentId);
-        setStudent(studentData);
+      // 1. Buscar dados básicos do aluno
+      const studentData = await loadStudentBasicData(targetStudentId);
+      setStudent(studentData);
 
-        // 2. Gerar relatório usando serviço simplificado
-        const studentReport = await SimpleReportService.generateStudentReport(targetStudentId);
-        setReport(studentReport);
+      // 2. Gerar relatório completo
+      const studentReport = await SimpleReportService.generateStudentReport(targetStudentId);
+      setReport(studentReport);
 
-      } catch (err: any) {
-        console.error('Erro ao carregar relatórios:', err);
-        setError(err.message || 'Erro ao carregar dados do aluno');
-      } finally {
-        setLoading(false);
+      // 3. Se for o próprio aluno, logar visualização
+      if (user?.role === 'student' && user.id === targetStudentId) {
+        // Log de auto-visualização
+        console.log(`Aluno ${studentData.name} visualizou próprio relatório`);
       }
-    };
 
-    loadData();
+    } catch (err: any) {
+      console.error('Erro ao carregar relatórios:', err);
+      setError(err.message || 'Erro ao carregar dados do aluno');
+    } finally {
+      setLoading(false);
+    }
   }, [targetStudentId, user]);
 
-  // ⚠️ ADICIONAR: Estado "sem aluno selecionado"
-  if (!targetStudentId && user?.role !== 'student') {
-    return (
-      <div className="text-center py-12">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-          <FaUserGraduate className="w-8 h-8 text-gray-400" />
-        </div>
-        <h3 className="text-lg font-semibold text-gray-700">
-          Selecione um aluno
-        </h3>
-        <p className="text-gray-500">
-          Escolha um aluno para visualizar o relatório individual
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const loadStudentData = async (id: string): Promise<Student> => {
+  // Função para carregar dados básicos do aluno
+  const loadStudentBasicData = async (id: string): Promise<Student> => {
     try {
-      // Para profissionais visualizando alunos
-      const stats = await StudentService.getStudentStats(id);
-
-      // Buscar dados completos do aluno
-      const studentDoc = await StudentService.getStudentById(id, user?.id || '');
-
+      // Usando método existente do StudentService
+      const studentData = await StudentService.getStudentById(id, user?.id || '');
+      
       return {
         id,
-        email: studentDoc.email,
-        name: studentDoc.name,
+        email: studentData.email,
+        name: studentData.name,
         role: 'student',
-        profileComplete: true,
-        isActive: true,
-        createdAt: studentDoc.createdAt,
-        updatedAt: studentDoc.updatedAt,
-        lastLoginAt: studentDoc.lastLoginAt,
+        profileComplete: studentData.profileComplete || true,
+        isActive: studentData.isActive !== false,
+        createdAt: studentData.createdAt,
+        updatedAt: studentData.updatedAt,
+        lastLoginAt: studentData.lastLoginAt,
         profile: {
-          cpf: studentDoc.profile.cpf || '',
-          birthday: studentDoc.profile.birthday,
-          school: studentDoc.profile.school,
-          grade: studentDoc.profile.grade,
-          assignedProfessionals: studentDoc.profile.assignedProfessionals || [],
-          assignedPrograms: studentDoc.profile.assignedPrograms || [],
-          streak: stats.streak,
-          totalPoints: stats.totalPoints,
-          level: stats.level,
-          achievements: []
+          cpf: studentData.profile?.cpf || '',
+          birthday: studentData.profile?.birthday || new Date(),
+          phone: studentData.profile?.phone || '',
+          school: studentData.profile?.school || 'Não informada',
+          grade: studentData.profile?.grade || 'Não informada',
+          parentName: studentData.profile?.parentName,
+          parentEmail: studentData.profile?.parentEmail,
+          parentPhone: studentData.profile?.parentPhone,
+          medicalInfo: studentData.profile?.medicalInfo,
+          address: studentData.profile?.address,
+          assignedProfessionals: studentData.profile?.assignedProfessionals || [],
+          assignedPrograms: studentData.profile?.assignedPrograms || [],
+          streak: studentData.profile?.streak || 0,
+          totalPoints: studentData.profile?.totalPoints || 0,
+          level: studentData.profile?.level || 1,
+          achievements: studentData.profile?.achievements || []
         }
       };
     } catch (error) {
-      console.error('Erro ao carregar dados do aluno:', error);
-      // Fallback básico
+      console.error('Erro ao carregar dados básicos do aluno:', error);
+      // Fallback minimalista
       return {
         id,
-        email: 'aluno@exemplo.com',
+        email: '',
         name: 'Aluno',
         role: 'student',
-        profileComplete: true,
+        profileComplete: false,
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
         profile: {
           cpf: '',
           birthday: new Date(),
-          school: 'Escola Exemplo',
-          grade: '6º Ano',
+          school: 'Não informada',
+          grade: 'Não informada',
           assignedProfessionals: [],
           assignedPrograms: [],
           streak: 0,
@@ -162,6 +183,24 @@ export default function StudentReports({
     }
   };
 
+  // Se não tem aluno selecionado (apenas para profissionais)
+  if (!targetStudentId && user?.role !== 'student') {
+    return (
+      <div className="text-center py-12">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+          <FaUserGraduate className="w-8 h-8 text-gray-400" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-700">
+          Selecione um aluno
+        </h3>
+        <p className="text-gray-500">
+          Escolha um aluno na lista para visualizar o relatório individual
+        </p>
+      </div>
+    );
+  }
+
+  // Funções auxiliares
   const getTrendColor = (trend: 'improving' | 'stable' | 'declining') => {
     switch (trend) {
       case 'improving': return 'text-green-600';
@@ -174,88 +213,246 @@ export default function StudentReports({
     switch (trend) {
       case 'improving': return <FaArrowTrendUp className="text-green-500" />;
       case 'declining': return <FaArrowTrendDown className="text-red-500" />;
-      default: return <span className="text-gray-400">→</span>;
+      default: return <FaArrowRightArrowLeft className="text-gray-400" />;
     }
   };
 
   const getTrendBadge = (trend: 'improving' | 'stable' | 'declining', confidence: 'high' | 'medium' | 'low') => {
-    const confidenceColor = {
-      high: 'bg-green-100 text-green-800',
-      medium: 'bg-yellow-100 text-yellow-800',
-      low: 'bg-gray-100 text-gray-800'
+    const baseColors = {
+      improving: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
+      stable: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
+      declining: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' }
+    }[trend];
+
+    const confidenceText = {
+      high: 'Alta confiança',
+      medium: 'Confiança média',
+      low: 'Baixa confiança'
     }[confidence];
 
     return (
-      <span className={`px-2 py-1 text-xs rounded-full ${confidenceColor}`}>
-        {trend === 'improving' ? 'Melhorando' :
-          trend === 'declining' ? 'Decaindo' : 'Estável'}
+      <span className={`px-3 py-1 text-xs rounded-full border ${baseColors.bg} ${baseColors.text} ${baseColors.border}`}>
+        {trend === 'improving' ? '📈 Melhorando' :
+          trend === 'declining' ? '📉 Decaindo' : '➡️ Estável'} • {confidenceText}
       </span>
     );
   };
 
   const formatDateRange = (start: Date, end: Date) => {
-    return `${start.toLocaleDateString('pt-BR')} - ${end.toLocaleDateString('pt-BR')}`;
+    return `${start.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} - ${end.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`;
   };
 
   const formatTime = (minutes: number) => {
-    if (minutes < 60) return `${minutes} min`;
+    if (!minutes || minutes === 0) return '0 min';
+    if (minutes < 60) return `${Math.round(minutes)} min`;
     const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
+    const mins = Math.round(minutes % 60);
     return mins > 0 ? `${hours}h${mins}min` : `${hours}h`;
   };
 
+  const formatPercentage = (value: number) => {
+    return `${value.toFixed(1)}%`;
+  };
+
+  const getMetricColorClass = (value: number, type: 'percentage' | 'score' | 'time' = 'percentage') => {
+    if (type === 'percentage' || type === 'score') {
+      if (value >= 80) return 'text-green-600';
+      if (value >= 60) return 'text-yellow-600';
+      return 'text-red-600';
+    }
+    return 'text-blue-600';
+  };
+
+  // Calcular desempenho por dia da semana (adaptado para dados reais)
+  const calculateDayPerformance = (): DayPerformance[] => {
+    if (!report || report.weeklyReports.length === 0) {
+      return [];
+    }
+
+    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const shortNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    
+    // Agregar dados de todas as semanas
+    const dayStats = Array(7).fill(null).map(() => ({ completed: 0, total: 0 }));
+
+    report.weeklyReports.forEach(week => {
+      Object.entries(week.dayBreakdown).forEach(([dayStr, data]) => {
+        const day = parseInt(dayStr);
+        if (day >= 0 && day < 7) {
+          dayStats[day].completed += data.completed || 0;
+          dayStats[day].total += data.total || 0;
+        }
+      });
+    });
+
+    return dayStats.map((stats, index) => ({
+      dayName: dayNames[index],
+      shortName: shortNames[index],
+      completed: stats.completed,
+      total: stats.total,
+      completionRate: stats.total > 0 ? (stats.completed / stats.total) * 100 : 0
+    }));
+  };
+
+  // Calcular tipos de atividade mais comuns
+  const getActivityTypeAnalysis = () => {
+    if (!report || report.weeklyReports.length === 0) return [];
+
+    const typeStats: Record<string, { completed: number; total: number; totalScore: number; totalTime: number }> = {};
+
+    report.weeklyReports.forEach(week => {
+      Object.entries(week.activityTypeBreakdown).forEach(([type, data]: [string, any]) => {
+        if (!typeStats[type]) {
+          typeStats[type] = { completed: 0, total: 0, totalScore: 0, totalTime: 0 };
+        }
+        typeStats[type].completed += data.completed || 0;
+        typeStats[type].total += data.total || 0;
+        typeStats[type].totalScore += (data.averageScore || 0) * (data.completed || 0);
+        typeStats[type].totalTime += (data.averageTime || 0) * (data.completed || 0);
+      });
+    });
+
+    return Object.entries(typeStats)
+      .map(([type, stats]) => ({
+        type: type.charAt(0).toUpperCase() + type.slice(1),
+        completed: stats.completed,
+        total: stats.total,
+        completionRate: stats.total > 0 ? (stats.completed / stats.total) * 100 : 0,
+        averageScore: stats.completed > 0 ? stats.totalScore / stats.completed : 0,
+        averageTime: stats.completed > 0 ? stats.totalTime / stats.completed : 0
+      }))
+      .sort((a, b) => b.completed - a.completed)
+      .slice(0, 5);
+  };
+
+  // Exportar relatório
   const exportReport = () => {
-    if (!report) return;
+    if (!report || !student) return;
 
     const data = {
-      student: student?.name,
-      report,
-      generatedAt: new Date().toISOString()
+      aluno: {
+        nome: student.name,
+        escola: student.profile.school,
+        serie: student.profile.grade,
+        pontos: student.profile.totalPoints,
+        nivel: student.profile.level,
+        streak: student.profile.streak
+      },
+      relatorio: report,
+      geradoEm: new Date().toISOString(),
+      periodo: selectedWeek === 'all' ? 'Todas as semanas' : `Semana ${selectedWeek}`
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `relatorio-${student?.name || 'aluno'}-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `relatorio-${student.name.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
   };
 
+  // Imprimir relatório
   const printReport = () => {
     window.print();
   };
 
+  // Compartilhar relatório (simulado)
+  const shareReport = () => {
+    if (!report || !student) return;
+    
+    const shareData = {
+      title: `Relatório de ${student.name}`,
+      text: `Confira o relatório de desempenho de ${student.name} na Nexus Platform.`,
+      url: window.location.href
+    };
+
+    if (navigator.share) {
+      navigator.share(shareData).catch(console.error);
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      alert('Link copiado para a área de transferência!');
+    }
+  };
+
+  // Componente de Card de Métrica
+  const MetricCard: React.FC<MetricCardProps> = ({ title, value, subtitle, icon, color, trend }) => {
+    const colorClasses = {
+      blue: 'from-blue-50 to-blue-100 border-blue-200 text-blue-700',
+      green: 'from-green-50 to-green-100 border-green-200 text-green-700',
+      orange: 'from-orange-50 to-orange-100 border-orange-200 text-orange-700',
+      purple: 'from-purple-50 to-purple-100 border-purple-200 text-purple-700',
+      red: 'from-red-50 to-red-100 border-red-200 text-red-700',
+      indigo: 'from-indigo-50 to-indigo-100 border-indigo-200 text-indigo-700'
+    }[color];
+
+    return (
+      <div className={`bg-gradient-to-br ${colorClasses} border rounded-xl p-5`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white rounded-lg">
+              {icon}
+            </div>
+            <div>
+              <div className="text-sm font-medium">{title}</div>
+              <div className="text-2xl font-bold mt-1">{value}</div>
+            </div>
+          </div>
+          {trend !== undefined && (
+            <div className={`text-sm ${trend > 0 ? 'text-green-600' : trend < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+              {trend > 0 ? '↗' : trend < 0 ? '↘' : '→'}
+            </div>
+          )}
+        </div>
+        <div className="text-sm opacity-80">{subtitle}</div>
+      </div>
+    );
+  };
+
+  // Loading state
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="text-center">
-          <FaSpinner className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
-          <p className="mt-4 text-gray-600">Gerando relatório do aluno...</p>
-        </div>
+      <div className="flex flex-col justify-center items-center min-h-[400px]">
+        <FaSpinner className="w-12 h-12 text-indigo-600 animate-spin mb-4" />
+        <p className="text-gray-600">Gerando relatório personalizado...</p>
+        <p className="text-sm text-gray-500 mt-2">
+          Analisando {report?.weeklyReports.length || 0} semanas de dados
+        </p>
       </div>
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-xl p-6">
         <div className="flex items-center gap-3">
-          <FaExclamationCircle className="text-red-500" />
+          <FaExclamationCircle className="text-red-500 flex-shrink-0" />
           <div>
-            <h3 className="font-semibold text-red-800">Erro ao carregar relatórios</h3>
+            <h3 className="font-semibold text-red-800">Erro ao carregar relatório</h3>
             <p className="text-red-700">{error}</p>
           </div>
         </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-        >
-          Tentar novamente
-        </button>
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={loadData}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Tentar novamente
+          </button>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+            >
+              Voltar
+            </button>
+          )}
+        </div>
       </div>
     );
   }
 
+  // No data state
   if (!report || !student) {
     return (
       <div className="text-center py-12">
@@ -263,41 +460,76 @@ export default function StudentReports({
           <FaUser className="w-8 h-8 text-gray-400" />
         </div>
         <h3 className="text-lg font-semibold text-gray-700 mb-2">
-          Nenhum dado disponível
+          Dados insuficientes
         </h3>
-        <p className="text-gray-500">
-          Não foram encontrados dados para gerar relatórios
+        <p className="text-gray-500 mb-6">
+          O aluno ainda não possui atividades concluídas para gerar um relatório
         </p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            Voltar para lista
+          </button>
+        )}
       </div>
     );
   }
+
+  const dayPerformance = calculateDayPerformance();
+  const activityTypes = getActivityTypeAnalysis();
+  const latestWeek = report.weeklyReports[0];
+  const bestDay = dayPerformance.length > 0 
+    ? dayPerformance.reduce((best, current) => 
+        current.completionRate > best.completionRate ? current : best
+      )
+    : null;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       {showHeader && (
         <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div className="flex items-start md:items-center gap-4">
               {onBack && (
                 <button
                   onClick={onBack}
-                  className="text-gray-600 hover:text-gray-800"
+                  className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mt-1"
                 >
-                  ← Voltar
+                  <FaArrowLeft />
+                  Voltar
                 </button>
               )}
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">
-                  Relatório do Aluno: {student.name}
-                </h1>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <FaUserGraduate className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-800">
+                      {student.name}
+                    </h1>
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <FaSchool className="text-gray-400" />
+                        {student.profile.school}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FaGraduationCap className="text-gray-400" />
+                        {student.profile.grade}
+                      </span>
+                    </div>
+                  </div>
+                </div>
                 <p className="text-gray-600">
-                  Análise detalhada de desempenho e engajamento
+                  Relatório individual de desempenho terapêutico-educacional
                 </p>
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={exportReport}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100"
@@ -312,49 +544,52 @@ export default function StudentReports({
                 <FaPrint />
                 Imprimir
               </button>
-            </div>
-          </div>
-
-          {/* Informações do Aluno */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500">Escola</div>
-              <div className="font-medium">{student.profile.school}</div>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500">Série</div>
-              <div className="font-medium">{student.profile.grade}</div>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500">Pontos Totais</div>
-              <div className="font-medium">{student.profile.totalPoints}</div>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="text-sm text-gray-500">Nível</div>
-              <div className="font-medium">{student.profile.level}</div>
+              {user?.role !== 'student' && (
+                <button
+                  onClick={shareReport}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
+                >
+                  <FaShare />
+                  Compartilhar
+                </button>
+              )}
             </div>
           </div>
 
           {/* Status do Relatório */}
-          <div className="mt-4 text-sm text-gray-500">
-            <div className="flex items-center gap-4">
-              <span>
-                <span className="font-medium">Gerado:</span> {report.generatedAt.toLocaleString('pt-BR')}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="font-medium">Status:</span>
-                <span className={`px-2 py-0.5 text-xs rounded-full ${report.dataFreshness === 'realtime' ? 'bg-green-100 text-green-800' :
-                  report.dataFreshness === 'cached' ? 'bg-blue-100 text-blue-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                  {report.dataFreshness === 'realtime' ? 'Atualizado' :
-                    report.dataFreshness === 'cached' ? 'Cache (5min)' : 'Antigo'}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-500 mb-1">Status dos Dados</div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${
+                  report.dataFreshness === 'realtime' ? 'bg-green-500' :
+                  report.dataFreshness === 'cached' ? 'bg-blue-500' : 'bg-gray-500'
+                }`} />
+                <span className="font-medium">
+                  {report.dataFreshness === 'realtime' ? 'Dados em tempo real' :
+                   report.dataFreshness === 'cached' ? 'Cache (atualizado)' : 'Dados antigos'}
                 </span>
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="font-medium">Tendência:</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-500 mb-1">Tendência Geral</div>
+              <div className="flex items-center gap-2">
+                {getTrendIcon(report.trend)}
                 {getTrendBadge(report.trend, report.trendConfidence)}
-              </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-500 mb-1">Período Analisado</div>
+              <div className="font-medium">
+                {report.weeklyReports.length} semana{report.weeklyReports.length !== 1 ? 's' : ''}
+                {latestWeek && (
+                  <span className="text-gray-500 text-sm ml-2">
+                    (última: {formatDateRange(latestWeek.weekStartDate, latestWeek.weekEndDate)})
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -363,23 +598,33 @@ export default function StudentReports({
       {/* Tabs */}
       <div className="bg-white rounded-xl shadow">
         <div className="border-b">
-          <div className="flex">
+          <div className="flex overflow-x-auto">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`px-6 py-4 font-medium ${activeTab === 'overview' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
+              className={`flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap ${activeTab === 'overview' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
+              <FaChartBar />
               Visão Geral
             </button>
             <button
               onClick={() => setActiveTab('weekly')}
-              className={`px-6 py-4 font-medium ${activeTab === 'weekly' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
+              className={`flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap ${activeTab === 'weekly' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
+              <FaCalendarWeek />
               Análise Semanal
             </button>
             <button
-              onClick={() => setActiveTab('insights')}
-              className={`px-6 py-4 font-medium ${activeTab === 'insights' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
+              onClick={() => setActiveTab('patterns')}
+              className={`flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap ${activeTab === 'patterns' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
+              <FaChartLine />
+              Padrões
+            </button>
+            <button
+              onClick={() => setActiveTab('insights')}
+              className={`flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap ${activeTab === 'insights' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <FaLightbulb />
               Insights
             </button>
           </div>
@@ -389,150 +634,126 @@ export default function StudentReports({
           {/* Visão Geral */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {/* Cards de Resumo */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {/* Pontos e Nível */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <FaStar className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <div className="text-sm text-blue-700">Pontuação Total</div>
-                      <div className="text-2xl font-bold text-blue-800">
-                        {report.overall.totalPoints}
-                      </div>
-                    </div>
+              {/* Cards de Métricas Principais */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <MetricCard
+                  title="Pontuação Total"
+                  value={report.overall.totalPoints}
+                  subtitle="Conquistados nas atividades"
+                  icon={<FaStar className="w-5 h-5 text-yellow-600" />}
+                  color="orange"
+                />
+                <MetricCard
+                  title="Sequência Atual"
+                  value={`${report.overall.streak} dias`}
+                  subtitle="Dias seguidos de atividades"
+                  icon={<FaFire className="w-5 h-5 text-red-600" />}
+                  color="red"
+                />
+                <MetricCard
+                  title="Atividades Concluídas"
+                  value={report.overall.totalActivitiesCompleted}
+                  subtitle={`${report.overall.averageCompletionRate.toFixed(1)}% de conclusão`}
+                  icon={<FaCheckCircle className="w-5 h-5 text-green-600" />}
+                  color="green"
+                />
+                <MetricCard
+                  title="Tempo Dedicado"
+                  value={formatTime(report.overall.totalTimeSpent)}
+                  subtitle="Total investido nas atividades"
+                  icon={<FaRegClock className="w-5 h-5 text-blue-600" />}
+                  color="blue"
+                />
+              </div>
+
+              {/* Performance por Dia da Semana */}
+              <div className="bg-white border rounded-xl p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="font-semibold text-gray-800 mb-2">Desempenho por Dia da Semana</h3>
+                    <p className="text-sm text-gray-600">
+                      Distribuição das atividades concluídas ao longo da semana
+                    </p>
                   </div>
-                  <div className="text-sm text-blue-700">
-                    Nível {report.overall.currentLevel}
-                  </div>
+                  {bestDay && (
+                    <div className="text-sm text-gray-500">
+                      Melhor dia: <span className="font-medium text-green-600">{bestDay.dayName}</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Streak */}
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-orange-100 rounded-lg">
-                      <FaFire className="w-5 h-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <div className="text-sm text-orange-700">Sequência Atual</div>
-                      <div className="text-2xl font-bold text-orange-800">
-                        {report.overall.streak} dias
+                <div className="grid grid-cols-7 gap-2">
+                  {dayPerformance.map((day, index) => (
+                    <div key={day.shortName} className="text-center">
+                      <div className="text-sm font-medium text-gray-700 mb-1">{day.shortName}</div>
+                      <div className="h-32 bg-gray-50 rounded-lg overflow-hidden relative border">
+                        {day.completionRate > 0 && (
+                          <div
+                            className={`absolute bottom-0 left-0 right-0 ${day.completionRate >= 80 ? 'bg-green-500' :
+                              day.completionRate >= 60 ? 'bg-yellow-500' :
+                              day.completionRate >= 40 ? 'bg-orange-500' : 'bg-red-500'
+                            }`}
+                            style={{ height: `${Math.min(day.completionRate, 100)}%` }}
+                          />
+                        )}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
+                          <div className="text-lg font-bold text-gray-800">
+                            {day.completed}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            de {day.total}
+                          </div>
+                        </div>
+                      </div>
+                      <div className={`text-xs font-medium mt-1 ${getMetricColorClass(day.completionRate)}`}>
+                        {day.completionRate.toFixed(0)}%
                       </div>
                     </div>
-                  </div>
-                  <div className="text-sm text-orange-700">
-                    Consistência de uso
-                  </div>
-                </div>
-
-                {/* Atividades */}
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <FaCheckCircle className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
-                      <div className="text-sm text-green-700">Atividades</div>
-                      <div className="text-2xl font-bold text-green-800">
-                        {report.overall.totalActivitiesCompleted}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-sm text-green-700">
-                    {report.overall.averageCompletionRate.toFixed(1)}% conclusão
-                  </div>
-                </div>
-
-                {/* Tempo */}
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <FaRegClock className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <div className="text-sm text-purple-700">Tempo Total</div>
-                      <div className="text-2xl font-bold text-purple-800">
-                        {formatTime(report.overall.totalTimeSpent)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-sm text-purple-700">
-                    Dedicado às atividades
-                  </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Últimas Semanas */}
+              {/* Resumo das Últimas Semanas */}
               {report.weeklyReports.length > 0 && (
                 <div className="bg-gray-50 rounded-xl p-6">
-                  <h3 className="font-semibold text-gray-800 mb-4">Desempenho Recente</h3>
+                  <h3 className="font-semibold text-gray-800 mb-4">Evolução Recente</h3>
                   <div className="space-y-3">
-                    {report.weeklyReports.slice(0, 3).map((week) => (
-                      <div key={week.weekNumber} className="flex items-center justify-between p-3 bg-white rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-gray-100 rounded-lg">
-                            <FaCalendarAlt className="text-gray-400" />
+                    {report.weeklyReports.slice(0, 4).map((week) => (
+                      <div key={week.weekNumber} className="flex items-center justify-between p-4 bg-white rounded-lg hover:bg-gray-50">
+                        <div className="flex items-center gap-4">
+                          <div className="p-2 bg-indigo-100 rounded-lg">
+                            <FaCalendarAlt className="text-indigo-600" />
                           </div>
                           <div>
-                            <div className="font-medium text-gray-800">Semana {week.weekNumber}</div>
+                            <div className="font-medium text-gray-800">
+                              Semana {week.weekNumber}
+                            </div>
                             <div className="text-sm text-gray-500">
                               {formatDateRange(week.weekStartDate, week.weekEndDate)}
                             </div>
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <div className={`font-bold ${week.summary.completionRate >= 70 ? 'text-green-600' : week.summary.completionRate >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {week.summary.completionRate.toFixed(1)}%
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <div className={`text-lg font-bold ${getMetricColorClass(week.summary.completionRate)}`}>
+                              {formatPercentage(week.summary.completionRate)}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {week.summary.completedActivities}/{week.summary.totalActivities} atividades
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {week.summary.completedActivities}/{week.summary.totalActivities} atividades
+                          <div className="text-right">
+                            <div className="font-medium text-gray-800">
+                              {week.summary.totalPoints} pts
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {formatTime(week.summary.averageTimePerActivity)}/atividade
+                            </div>
                           </div>
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Melhor Dia da Semana */}
-              {report.weeklyReports.length > 0 && (
-                <div className="bg-white border rounded-xl p-6">
-                  <h3 className="font-semibold text-gray-800 mb-4">Distribuição por Dia</h3>
-                  <div className="grid grid-cols-7 gap-2">
-                    {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((day, index) => {
-                      const latestWeek = report.weeklyReports[0];
-                      const dayData = latestWeek.dayBreakdown[index];
-                      const completionRate = dayData?.total > 0
-                        ? (dayData.completed / dayData.total) * 100
-                        : 0;
-
-                      return (
-                        <div key={day} className="text-center">
-                          <div className="text-sm text-gray-500 mb-1">{day}</div>
-                          <div className="h-24 bg-gray-100 rounded-lg overflow-hidden relative">
-                            {completionRate > 0 && (
-                              <div
-                                className={`absolute bottom-0 left-0 right-0 ${completionRate >= 80 ? 'bg-green-500' :
-                                  completionRate >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                  }`}
-                                style={{ height: `${completionRate}%` }}
-                              />
-                            )}
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="text-xs font-medium">
-                                {dayData?.completed || 0}/{dayData?.total || 0}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {completionRate.toFixed(0)}%
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
               )}
@@ -542,13 +763,17 @@ export default function StudentReports({
           {/* Análise Semanal */}
           {activeTab === 'weekly' && (
             <div className="space-y-6">
-              {/* Seletor de Semana */}
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-800">Análise Detalhada por Semana</h3>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h3 className="font-semibold text-gray-800">Análise Detalhada por Semana</h3>
+                  <p className="text-sm text-gray-600">
+                    Selecione uma semana para análise detalhada
+                  </p>
+                </div>
                 <select
                   value={selectedWeek}
                   onChange={(e) => setSelectedWeek(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                  className="px-4 py-2 border border-gray-300 rounded-lg"
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white"
                 >
                   <option value="all">Todas as semanas</option>
                   {report.weeklyReports.map(week => (
@@ -559,77 +784,108 @@ export default function StudentReports({
                 </select>
               </div>
 
-              {/* Lista de Semanas */}
               <div className="space-y-4">
                 {(selectedWeek === 'all' ? report.weeklyReports : report.weeklyReports.filter(w => w.weekNumber === selectedWeek)).map(week => (
                   <div key={week.weekNumber} className="border rounded-xl overflow-hidden">
-                    <div className="bg-gray-50 px-6 py-4 border-b">
-                      <div className="flex justify-between items-center">
+                    {/* Cabeçalho da Semana */}
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                         <div>
-                          <h4 className="font-semibold text-gray-800">
+                          <h4 className="font-bold text-gray-800 text-lg">
                             Semana {week.weekNumber}
                           </h4>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-gray-600">
                             {formatDateRange(week.weekStartDate, week.weekEndDate)}
                           </p>
                         </div>
-                        <div className="text-sm text-gray-500">
-                          {week.summary.completionRate.toFixed(1)}% concluído
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className={`text-2xl font-bold ${getMetricColorClass(week.summary.completionRate)}`}>
+                              {formatPercentage(week.summary.completionRate)}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              Taxa de conclusão
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
 
+                    {/* Conteúdo da Semana */}
                     <div className="p-6">
-                      {/* Métricas da Semana */}
+                      {/* Métricas Principais da Semana */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div className="p-4 bg-blue-50 rounded-lg">
-                          <div className="text-sm text-blue-700 mb-1">Engajamento</div>
-                          <div className="text-2xl font-bold text-blue-800">
-                            {week.summary.consistencyScore.toFixed(1)}%
+                        <div className="p-4 bg-green-50 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <FaChartLine className="text-green-600" />
+                            <div>
+                              <div className="text-sm text-green-700">Engajamento</div>
+                              <div className="text-xl font-bold text-green-800">
+                                {formatPercentage(week.summary.consistencyScore)}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-blue-600">
-                            Aderência: {week.summary.adherenceScore.toFixed(1)}%
+                          <div className="text-sm text-green-600">
+                            Pontos conquistados: <span className="font-bold">{week.summary.totalPoints}</span>
                           </div>
                         </div>
 
-                        <div className="p-4 bg-green-50 rounded-lg">
-                          <div className="text-sm text-green-700 mb-1">Desempenho</div>
-                          <div className="text-2xl font-bold text-green-800">
-                            {week.summary.averageScore.toFixed(1)}
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <FaClock className="text-blue-600" />
+                            <div>
+                              <div className="text-sm text-blue-700">Tempo Médio</div>
+                              <div className="text-xl font-bold text-blue-800">
+                                {formatTime(week.summary.averageTimePerActivity)}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-green-600">
-                            {week.summary.totalPoints} pontos
+                          <div className="text-sm text-blue-600">
+                            por atividade • {formatPercentage(week.summary.adherenceScore)} aderência
                           </div>
                         </div>
 
                         <div className="p-4 bg-purple-50 rounded-lg">
-                          <div className="text-sm text-purple-700 mb-1">Tempo</div>
-                          <div className="text-2xl font-bold text-purple-800">
-                            {formatTime(week.summary.averageTimePerActivity)}
+                          <div className="flex items-center gap-3 mb-3">
+                            <FaBrain className="text-purple-600" />
+                            <div>
+                              <div className="text-sm text-purple-700">Desempenho</div>
+                              <div className="text-xl font-bold text-purple-800">
+                                {week.summary.averageScore.toFixed(1)}
+                              </div>
+                            </div>
                           </div>
                           <div className="text-sm text-purple-600">
-                            por atividade
+                            Média por atividade
                           </div>
                         </div>
                       </div>
 
-                      {/* Detalhamento por Tipo */}
-                      {Object.keys(week.activityTypeBreakdown).length > 0 && (
+                      {/* Tipos de Atividade */}
+                      {activityTypes.length > 0 && (
                         <div className="mb-6">
-                          <h5 className="font-medium text-gray-700 mb-3">Desempenho por Tipo</h5>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            {Object.entries(week.activityTypeBreakdown).map(([type, data]: [string, any]) => (
-                              <div key={type} className="p-3 bg-gray-50 rounded-lg">
-                                <div className="font-medium text-gray-800 mb-1 capitalize">{type}</div>
-                                <div className="space-y-1">
-                                  <div className="text-sm text-gray-600">
-                                    Concluídas: <span className="font-medium">{data.completed}/{data.total}</span>
+                          <h5 className="font-medium text-gray-700 mb-4">Desempenho por Tipo de Atividade</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {activityTypes.map((type) => (
+                              <div key={type.type} className="p-4 bg-white border rounded-lg">
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="font-medium text-gray-800">{type.type}</span>
+                                  <span className={`text-sm font-bold ${getMetricColorClass(type.completionRate)}`}>
+                                    {formatPercentage(type.completionRate)}
+                                  </span>
+                                </div>
+                                <div className="space-y-2 text-sm text-gray-600">
+                                  <div className="flex justify-between">
+                                    <span>Concluídas:</span>
+                                    <span className="font-medium">{type.completed}/{type.total}</span>
                                   </div>
-                                  <div className="text-sm text-gray-600">
-                                    Pontuação: <span className="font-medium">{data.averageScore.toFixed(1)}</span>
+                                  <div className="flex justify-between">
+                                    <span>Pontuação média:</span>
+                                    <span className="font-medium">{type.averageScore.toFixed(1)}</span>
                                   </div>
-                                  <div className="text-sm text-gray-600">
-                                    Tempo: <span className="font-medium">{formatTime(data.averageTime)}</span>
+                                  <div className="flex justify-between">
+                                    <span>Tempo médio:</span>
+                                    <span className="font-medium">{formatTime(type.averageTime)}</span>
                                   </div>
                                 </div>
                               </div>
@@ -639,32 +895,38 @@ export default function StudentReports({
                       )}
 
                       {/* Insights da Semana */}
-                      <div className="space-y-3">
-                        <h5 className="font-medium text-gray-700">Insights da Semana</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-4">
+                        <h5 className="font-medium text-gray-700">Análise e Insights</h5>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                           {week.insights.strengths.length > 0 && (
-                            <div className="p-3 bg-green-50 rounded-lg">
-                              <div className="flex items-center gap-2 mb-2">
+                            <div className="p-4 bg-green-50 rounded-lg">
+                              <div className="flex items-center gap-3 mb-3">
                                 <FaArrowTrendUp className="text-green-600" />
                                 <span className="font-medium text-green-800">Pontos Fortes</span>
                               </div>
-                              <ul className="text-sm text-green-700 space-y-1">
+                              <ul className="space-y-2">
                                 {week.insights.strengths.map((strength, i) => (
-                                  <li key={i}>• {strength}</li>
+                                  <li key={i} className="text-sm text-green-700 flex items-start gap-2">
+                                    <span className="mt-1">•</span>
+                                    <span>{strength}</span>
+                                  </li>
                                 ))}
                               </ul>
                             </div>
                           )}
 
                           {week.insights.challenges.length > 0 && (
-                            <div className="p-3 bg-yellow-50 rounded-lg">
-                              <div className="flex items-center gap-2 mb-2">
+                            <div className="p-4 bg-yellow-50 rounded-lg">
+                              <div className="flex items-center gap-3 mb-3">
                                 <FaExclamationCircle className="text-yellow-600" />
-                                <span className="font-medium text-yellow-800">Desafios</span>
+                                <span className="font-medium text-yellow-800">Áreas para Melhoria</span>
                               </div>
-                              <ul className="text-sm text-yellow-700 space-y-1">
+                              <ul className="space-y-2">
                                 {week.insights.challenges.map((challenge, i) => (
-                                  <li key={i}>• {challenge}</li>
+                                  <li key={i} className="text-sm text-yellow-700 flex items-start gap-2">
+                                    <span className="mt-1">•</span>
+                                    <span>{challenge}</span>
+                                  </li>
                                 ))}
                               </ul>
                             </div>
@@ -678,85 +940,253 @@ export default function StudentReports({
             </div>
           )}
 
-          {/* Insights */}
-          {activeTab === 'insights' && report.weeklyReports.length > 0 && (
+          {/* Padrões */}
+          {activeTab === 'patterns' && (
             <div className="space-y-6">
-              {/* Insights Gerados */}
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <FaLightbulb className="w-6 h-6 text-indigo-600" />
-                  <h3 className="font-semibold text-indigo-800">Análise Detalhada</h3>
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <FaChartLine className="w-6 h-6 text-indigo-600" />
+                  <h3 className="font-semibold text-indigo-800">Análise de Padrões</h3>
                 </div>
 
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-800 mb-3">Padrões Detectados</h4>
-                  <div className="space-y-2">
-                    {report.trend === 'improving' && (
-                      <div className="flex items-start gap-2">
-                        <div className="mt-1 w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-gray-700">Tendência positiva de melhoria no desempenho</span>
-                      </div>
-                    )}
-                    {report.overall.streak >= 3 && (
-                      <div className="flex items-start gap-2">
-                        <div className="mt-1 w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-gray-700">Boa consistência de uso da plataforma</span>
-                      </div>
-                    )}
-                    {report.overall.averageCompletionRate >= 70 && (
-                      <div className="flex items-start gap-2">
-                        <div className="mt-1 w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-gray-700">Alta taxa de conclusão de atividades</span>
-                      </div>
-                    )}
-                    {report.overall.averageCompletionRate <= 50 && (
-                      <div className="flex items-start gap-2">
-                        <div className="mt-1 w-2 h-2 bg-yellow-500 rounded-full"></div>
-                        <span className="text-gray-700">Oportunidade para melhorar engajamento</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Tendência Geral */}
                   <div className="p-4 bg-white rounded-lg">
-                    <div className="text-sm text-gray-500 mb-1">Confiança da Análise</div>
-                    <div className="font-medium text-gray-800">
-                      {report.trendConfidence === 'high' ? 'Alta' :
-                        report.trendConfidence === 'medium' ? 'Média' : 'Baixa'}
+                    <h4 className="font-medium text-gray-800 mb-3">Tendência Geral</h4>
+                    <div className="flex items-center gap-3">
+                      {getTrendIcon(report.trend)}
+                      <div>
+                        <div className="font-medium text-gray-800">
+                          {report.trend === 'improving' ? 'Melhoria contínua' :
+                           report.trend === 'declining' ? 'Queda no desempenho' : 'Estabilidade'}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {report.trendConfidence === 'high' ? 'Alta confiança nesta análise' :
+                           report.trendConfidence === 'medium' ? 'Confiança moderada' : 'Análise preliminar'}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
+                  {/* Consistência */}
                   <div className="p-4 bg-white rounded-lg">
-                    <div className="text-sm text-gray-500 mb-1">Semanas Analisadas</div>
-                    <div className="font-medium text-gray-800">
-                      {report.weeklyReports.length} semanas
+                    <h4 className="font-medium text-gray-800 mb-3">Consistência</h4>
+                    <div className="flex items-center gap-3">
+                      <FaFire className={`w-5 h-5 ${report.overall.streak >= 5 ? 'text-orange-600' : 'text-gray-400'}`} />
+                      <div>
+                        <div className="font-medium text-gray-800">
+                          {report.overall.streak} dias seguidos
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {report.overall.streak >= 5 ? 'Excelente consistência!' :
+                           report.overall.streak >= 3 ? 'Boa rotina' : 'Estabelecendo rotina'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Análise de Dados */}
+                <div className="mt-6 space-y-4">
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-2">Resumo de Dados</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center p-3 bg-white rounded-lg">
+                        <div className="text-lg font-bold text-gray-800">{report.weeklyReports.length}</div>
+                        <div className="text-sm text-gray-600">Semanas</div>
+                      </div>
+                      <div className="text-center p-3 bg-white rounded-lg">
+                        <div className="text-lg font-bold text-gray-800">{report.overall.totalActivitiesCompleted}</div>
+                        <div className="text-sm text-gray-600">Atividades</div>
+                      </div>
+                      <div className="text-center p-3 bg-white rounded-lg">
+                        <div className="text-lg font-bold text-gray-800">{formatTime(report.overall.totalTimeSpent)}</div>
+                        <div className="text-sm text-gray-600">Tempo total</div>
+                      </div>
+                      <div className="text-center p-3 bg-white rounded-lg">
+                        <div className="text-lg font-bold text-gray-800">{report.overall.averageCompletionRate.toFixed(1)}%</div>
+                        <div className="text-sm text-gray-600">Conclusão média</div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Recomendações Personalizadas */}
+              {/* Melhores Dias e Tipos */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Melhores Dias */}
+                <div className="bg-white border rounded-xl p-6">
+                  <h4 className="font-medium text-gray-800 mb-4">Dias de Maior Produtividade</h4>
+                  <div className="space-y-3">
+                    {dayPerformance
+                      .filter(day => day.total > 0)
+                      .sort((a, b) => b.completionRate - a.completionRate)
+                      .slice(0, 3)
+                      .map((day, index) => (
+                        <div key={day.shortName} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                              index === 1 ? 'bg-gray-100 text-gray-700' :
+                              'bg-orange-100 text-orange-700'
+                            }`}>
+                              {index + 1}
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-800">{day.dayName}</div>
+                              <div className="text-sm text-gray-500">
+                                {day.completed}/{day.total} atividades
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`font-bold ${getMetricColorClass(day.completionRate)}`}>
+                            {formatPercentage(day.completionRate)}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Tipos Preferidos */}
+                <div className="bg-white border rounded-xl p-6">
+                  <h4 className="font-medium text-gray-800 mb-4">Tipos de Atividade Preferidos</h4>
+                  <div className="space-y-3">
+                    {activityTypes
+                      .sort((a, b) => b.completed - a.completed)
+                      .slice(0, 3)
+                      .map((type, index) => (
+                        <div key={type.type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              index === 0 ? 'bg-green-100 text-green-700' :
+                              index === 1 ? 'bg-blue-100 text-blue-700' :
+                              'bg-purple-100 text-purple-700'
+                            }`}>
+                              {index + 1}
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-800">{type.type}</div>
+                              <div className="text-sm text-gray-500">
+                                {type.completed} concluídas
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`font-bold ${getMetricColorClass(type.completionRate)}`}>
+                            {formatPercentage(type.completionRate)}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Insights */}
+          {activeTab === 'insights' && (
+            <div className="space-y-6">
+              {/* Insights Gerais */}
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <FaLightbulb className="w-6 h-6 text-indigo-600" />
+                  <div>
+                    <h3 className="font-semibold text-indigo-800">Insights Personalizados</h3>
+                    <p className="text-sm text-indigo-600">
+                      Baseado em {report.weeklyReports.length} semanas de dados
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Pontos Fortes */}
+                  <div className="p-4 bg-white rounded-lg">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <FaArrowTrendUp className="w-4 h-4 text-green-600" />
+                      </div>
+                      <h4 className="font-medium text-green-800">Pontos Fortes</h4>
+                    </div>
+                    <div className="space-y-2">
+                      {report.overall.streak >= 3 && (
+                        <div className="text-sm text-green-700">
+                          • Excelente consistência de uso ({report.overall.streak} dias seguidos)
+                        </div>
+                      )}
+                      {report.overall.averageCompletionRate >= 70 && (
+                        <div className="text-sm text-green-700">
+                          • Alta taxa de conclusão ({report.overall.averageCompletionRate.toFixed(1)}%)
+                        </div>
+                      )}
+                      {report.trend === 'improving' && report.trendConfidence === 'high' && (
+                        <div className="text-sm text-green-700">
+                          • Tendência positiva de melhoria contínua
+                        </div>
+                      )}
+                      {bestDay && bestDay.completionRate >= 80 && (
+                        <div className="text-sm text-green-700">
+                          • Excelente desempenho nas {bestDay.dayName}s ({bestDay.completionRate.toFixed(0)}%)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Oportunidades */}
+                  <div className="p-4 bg-white rounded-lg">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-yellow-100 rounded-lg">
+                        <FaExclamationCircle className="w-4 h-4 text-yellow-600" />
+                      </div>
+                      <h4 className="font-medium text-yellow-800">Oportunidades</h4>
+                    </div>
+                    <div className="space-y-2">
+                      {report.overall.averageCompletionRate <= 50 && (
+                        <div className="text-sm text-yellow-700">
+                          • Baixa taxa de conclusão geral
+                        </div>
+                      )}
+                      {dayPerformance.some(day => day.completionRate <= 30 && day.total > 0) && (
+                        <div className="text-sm text-yellow-700">
+                          • Dias específicos com baixo engajamento
+                        </div>
+                      )}
+                      {report.trend === 'declining' && (
+                        <div className="text-sm text-yellow-700">
+                          • Tendência de queda no desempenho
+                        </div>
+                      )}
+                      {activityTypes.some(type => type.completionRate <= 40) && (
+                        <div className="text-sm text-yellow-700">
+                          • Alguns tipos de atividade com baixa aceitação
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recomendações */}
               <div className="bg-white border rounded-xl p-6">
-                <h3 className="font-semibold text-gray-800 mb-4">Recomendações Personalizadas</h3>
+                <h3 className="font-semibold text-gray-800 mb-6">Recomendações Personalizadas</h3>
 
                 <div className="space-y-4">
-                  {report.weeklyReports[0]?.insights.recommendations.length > 0 ? (
-                    report.weeklyReports[0].insights.recommendations.map((recommendation, index) => (
-                      <div key={index} className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
-                        <div className="flex-shrink-0 mt-1">
-                          <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center">
+                  {latestWeek?.insights.recommendations && latestWeek.insights.recommendations.length > 0 ? (
+                    latestWeek.insights.recommendations.map((recommendation, index) => (
+                      <div key={index} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
                             <span className="text-sm font-medium text-indigo-600">{index + 1}</span>
                           </div>
                         </div>
-                        <div>
+                        <div className="flex-1">
                           <p className="text-gray-800">{recommendation}</p>
-                          <div className="mt-2 flex gap-2">
-                            <button className="text-sm text-indigo-600 hover:text-indigo-800">
-                              Aplicar
-                            </button>
-                            <button className="text-sm text-gray-500 hover:text-gray-700">
-                              Mais tarde
+                          <div className="mt-3 flex gap-3">
+                            {user?.role !== 'student' && (
+                              <button className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">
+                                Aplicar sugestão
+                              </button>
+                            )}
+                            <button className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800">
+                              Mais detalhes
                             </button>
                           </div>
                         </div>
@@ -767,62 +1197,44 @@ export default function StudentReports({
                       <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                         <FaLightbulb className="w-8 h-8 text-gray-400" />
                       </div>
-                      <p className="text-gray-500">
+                      <p className="text-gray-500 mb-4">
                         Continue usando a plataforma para gerar recomendações personalizadas
                       </p>
+                      {user?.role !== 'student' && (
+                        <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                          Gerar recomendações
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Ações Sugeridas */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-                <h3 className="font-semibold text-yellow-800 mb-4">Ações Sugeridas</h3>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
+              {/* Botão de Ação */}
+              {user?.role !== 'student' && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                      <div className="font-medium text-gray-800">Revisar cronograma</div>
-                      <div className="text-sm text-gray-500">Ajustar atividades mais desafiadoras</div>
+                      <h3 className="font-semibold text-green-800 mb-2">Próximos Passos</h3>
+                      <p className="text-green-700">
+                        Baseado nesta análise, você pode tomar ações proativas para apoiar {student.name}
+                      </p>
                     </div>
-                    <button className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
-                      Revisar
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg">
-                    <div>
-                      <div className="font-medium text-gray-800">Programar feedback</div>
-                      <div className="text-sm text-gray-500">Agendar sessão de acompanhamento</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        Agendar reunião
+                      </button>
+                      <button className="px-4 py-2 bg-white text-green-700 border border-green-300 rounded-lg hover:bg-green-50">
+                        Ajustar cronograma
+                      </button>
                     </div>
-                    <button className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
-                      Agendar
-                    </button>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
       </div>
-
-      {/* Compartilhamento */}
-      {user?.role !== 'student' && (
-        <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-1">Compartilhar Relatório</h3>
-              <p className="text-sm text-gray-500">
-                Compartilhe este relatório com outros profissionais
-              </p>
-            </div>
-            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-              <FaShare />
-              Compartilhar
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

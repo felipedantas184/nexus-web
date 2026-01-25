@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { CreateScheduleDTO, ScheduleCategory } from '@/types/schedule';
-import { 
-  FaCalendarAlt, 
-  FaClock, 
-  FaTag, 
+import {
+  FaCalendarAlt,
+  FaClock,
+  FaTag,
   FaInfoCircle
 } from 'react-icons/fa';
 
@@ -29,20 +29,20 @@ export default function ScheduleHeaderPanel({
   activeDaysCount
 }: ScheduleHeaderPanelProps) {
   const categories: { value: ScheduleCategory; label: string; color: string }[] = [
-    { 
-      value: 'therapeutic', 
-      label: 'Terapêutico', 
+    {
+      value: 'therapeutic',
+      label: 'Terapêutico',
       color: 'from-blue-500 to-cyan-500'
     },
-    { 
-      value: 'educational', 
-      label: 'Educacional', 
-      color: 'from-green-500 to-emerald-500'
-    },
-    { 
-      value: 'mixed', 
-      label: 'Misto', 
+    {
+      value: 'educational',
+      label: 'Educacional',
       color: 'from-purple-500 to-pink-500'
+    },
+    {
+      value: 'mixed',
+      label: 'Misto',
+      color: 'from-green-500 to-emerald-500'
     }
   ];
 
@@ -81,7 +81,7 @@ export default function ScheduleHeaderPanel({
               </p>
             </div>
           </div>
-          
+
           {/* Estatísticas Rápidas */}
           <div className="flex items-center gap-4">
             <div className="text-center">
@@ -120,7 +120,7 @@ export default function ScheduleHeaderPanel({
                 type="text"
                 value={formData.name}
                 onChange={(e) => updateField('name', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all placeholder:text-gray-400 text-gray-900"
                 placeholder="Ex: Programa de Recuperação Matemática"
               />
               {errors.name && (
@@ -136,7 +136,7 @@ export default function ScheduleHeaderPanel({
               <textarea
                 value={formData.description || ''}
                 onChange={(e) => updateField('description', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none placeholder:text-gray-400 text-gray-900"
                 placeholder="Descreva o propósito deste cronograma..."
                 rows={2}
               />
@@ -153,18 +153,16 @@ export default function ScheduleHeaderPanel({
                     key={category.value}
                     type="button"
                     onClick={() => updateField('category', category.value)}
-                    className={`p-3 border rounded-lg transition-all ${
-                      formData.category === category.value
-                        ? `border-indigo-500 bg-gradient-to-r ${category.color} bg-opacity-10`
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    className={`p-3 border rounded-lg transition-all ${formData.category === category.value
+                      ? `border-indigo-500 bg-gradient-to-r ${category.color} bg-opacity-10`
+                      : 'border-gray-200 hover:border-gray-300'
+                      }`}
                   >
                     <div className="text-center">
-                      <div className={`font-medium text-sm ${
-                        formData.category === category.value 
-                          ? 'text-indigo-600' 
-                          : 'text-gray-700'
-                      }`}>
+                      <div className={`font-medium text-sm ${formData.category === category.value
+                        ? 'text-indigo-600'
+                        : 'text-gray-700'
+                        }`}>
                         {category.label}
                       </div>
                     </div>
@@ -187,72 +185,19 @@ export default function ScheduleHeaderPanel({
               <input
                 type="date"
                 value={formData.startDate.toISOString().split('T')[0]}
-                onChange={(e) => updateField('startDate', new Date(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => {
+                  const [year, month, day] = e.target.value.split('-').map(Number);
+                  const localDate = new Date(year, month - 1, day);
+                  updateField('startDate', localDate);
+                }}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 text-gray-900"
+                min={new Date().toLocaleDateString('en-CA')}
               />
-            </div>
-
-            {/* Dias Ativos */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Dias da Semana Ativos *
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {daysOfWeek.map((day) => (
-                  <button
-                    key={day.id}
-                    type="button"
-                    onClick={() => toggleActiveDay(day.id)}
-                    className={`px-3 py-2 rounded-lg font-medium text-sm transition-all ${
-                      formData.activeDays.includes(day.id)
-                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {day.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
-                <FaInfoCircle className="w-3 h-3" />
-                {activeDaysCount} dia{activeDaysCount !== 1 ? 's' : ''} ativo{activeDaysCount !== 1 ? 's' : ''}
-              </div>
-              {errors.activeDays && (
-                <p className="mt-2 text-sm text-red-600">{errors.activeDays}</p>
-              )}
             </div>
 
             {/* Regras de Repetição */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                <div className="flex items-center gap-2">
-                  <FaClock className="w-4 h-4 text-blue-500" />
-                  Regras de Repetição
-                </div>
-              </label>
-              
               <div className="space-y-3">
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.repeatRules.resetOnRepeat}
-                    onChange={(e) => updateField('repeatRules', {
-                      ...formData.repeatRules,
-                      resetOnRepeat: e.target.checked
-                    })}
-                    className="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <div>
-                    <div className="font-medium text-gray-700 text-sm">
-                      Resetar atividades a cada semana
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      As atividades serão "renovadas" a cada nova semana
-                    </div>
-                  </div>
-                </label>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Número máximo de repetições
@@ -266,7 +211,7 @@ export default function ScheduleHeaderPanel({
                       ...formData.repeatRules,
                       maxRepetitions: e.target.value ? parseInt(e.target.value) : undefined
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 text-gray-900"
                     placeholder="Ex: 4 (para 1 mês)"
                   />
                   <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">

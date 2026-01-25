@@ -68,13 +68,6 @@ export default function ProfessionalSidebar({
 
   const quickActions = [
     {
-      icon: FaBook,
-      label: 'Novo Cronograma',
-      href: '/professional/programs/create',
-      color: 'bg-emerald-500/20',
-      iconColor: 'text-emerald-300'
-    },
-    {
       icon: FaCalendarAlt,
       label: 'Novo Cronograma',
       href: '/professional/schedules/create',
