@@ -1,4 +1,4 @@
-// lib/services/NotificationService.ts - COMPLETO COM MÉTODOS LOCAIS
+// lib/services/NotificationService.ts
 import {
   collection,
   addDoc,
@@ -11,31 +11,269 @@ import {
   getDoc,
   serverTimestamp
 } from 'firebase/firestore';
-import { firestore } from '@/firebase/config';
+import { firestore, messaging } from '@/firebase/config';
 import { UserNotificationPreferences } from '@/types/notification';
+import { getToken, deleteToken, onMessage } from 'firebase/messaging';
+
+// Importar funções do Firebase Cloud Functions
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/firebase/config';
 
 export class NotificationService {
   private static readonly COLLECTION = 'notifications';
   private static readonly PREFERENCES_COLLECTION = 'notificationPreferences';
-  private static readonly DEVICES_COLLECTION = 'userDevices';
+  private static readonly TOKENS_COLLECTION = 'userFCMTokens';
+
+  // ========== MÉTODOS FCM (NOVOS) ==========
+
+  /**
+   * Solicitar permissão e obter token FCM real
+   */
+  static async requestFCMToken(userId: string): Promise<string | null> {
+    try {
+      if (!messaging) {
+        console.warn('Firebase Messaging não disponível');
+        return null;
+      }
+
+      // Solicitar permissão
+      const permission = await Notification.requestPermission();
+
+      if (permission !== 'granted') {
+        console.warn('Permissão para notificações não concedida');
+        return null;
+      }
+
+      // Obter VAPID key do environment
+      const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+      if (!vapidKey) {
+        console.error('VAPID key não configurada');
+        return null;
+      }
+
+      // Obter token FCM
+      const token = await getToken(messaging, { vapidKey });
+
+      if (!token) {
+        console.warn('Não foi possível obter token FCM');
+        return null;
+      }
+
+      console.log('✅ Token FCM obtido:', token.substring(0, 20) + '...');
+
+      // Salvar token no Firestore via Cloud Function
+      await this.saveFCMTokenToBackend(userId, token);
+
+      return token;
+
+    } catch (error: any) {
+      console.error('❌ Erro ao obter token FCM:', error);
+
+      // Se for erro de permissão, não propagar
+      if (error.code === 'messaging/permission-blocked') {
+        console.warn('Permissão para notificações bloqueada pelo usuário');
+      }
+
+      return null;
+    }
+  }
+
+  /**
+   * Salvar token FCM no backend (via Cloud Function)
+   */
+  private static async saveFCMTokenToBackend(userId: string, token: string): Promise<boolean> {
+    try {
+      if (!functions) {
+        console.warn('Firebase Functions não disponível');
+        return false;
+      }
+
+      const saveTokenFunction = httpsCallable(functions, 'saveUserFCMToken');
+
+      await saveTokenFunction({
+        token,
+        deviceInfo: {
+          platform: this.getPlatform(),
+          userAgent: navigator.userAgent,
+          language: navigator.language
+        }
+      });
+
+      console.log('✅ Token FCM salvo no backend');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Erro ao salvar token FCM no backend:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Remover token FCM (logout ou dispositivo removido)
+   */
+  static async removeFCMToken(userId: string, token: string): Promise<boolean> {
+    try {
+      if (!functions || !messaging) {
+        console.warn('Firebase não disponível');
+        return false;
+      }
+
+      // Remover localmente
+      await deleteToken(messaging);
+
+      // Remover do backend
+      const removeTokenFunction = httpsCallable(functions, 'removeUserFCMToken');
+      await removeTokenFunction({ token });
+
+      console.log('✅ Token FCM removido');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Erro ao remover token FCM:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Configurar listener para mensagens em foreground
+   */
+  static setupForegroundMessageListener(
+    onMessageReceived: (payload: any) => void
+  ): () => void {
+    if (!messaging) {
+      console.warn('Firebase Messaging não disponível');
+      return () => { };
+    }
+
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('📬 Mensagem em foreground recebida:', payload);
+
+      // Mostrar notificação local se não estiver visível
+      if (payload.notification) {
+        this.showLocalForegroundNotification(
+          payload.notification.title || 'Nexus Platform',
+          payload.notification.body || 'Nova mensagem',
+          payload.data
+        );
+      }
+
+      // Chamar callback personalizado
+      onMessageReceived(payload);
+    });
+
+    return unsubscribe;
+  }
+
+  /**
+   * Enviar notificação push via FCM (para testes ou ações específicas)
+   */
+  static async sendFCMPushNotification(
+    userId: string,
+    title: string,
+    body: string,
+    data?: any
+  ): Promise<boolean> {
+    try {
+      const functionUrl = 'http://localhost:5001/projeto-nexus-62ebb/southamerica-east1/sendPushNotification';
+
+      console.log('📤 Chamando função via fetch...');
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          title,
+          body,
+          data,
+          type: 'custom'
+        })
+      });
+
+      console.log('✅ Status:', response.status);
+      const result = await response.json();
+      console.log('✅ Resultado:', result);
+
+      return result.success === true;
+
+    } catch (error) {
+      console.error('❌ Erro:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Verificar se FCM está disponível e configurado
+   */
+  static async checkFCMAvailability(): Promise<{
+    available: boolean;
+    permission: NotificationPermission;
+    tokenExists: boolean;
+    vapidKeyConfigured: boolean;
+  }> {
+    const available = !!messaging;
+    const permission = Notification.permission;
+    const vapidKeyConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+
+    let tokenExists = false;
+    if (messaging && permission === 'granted') {
+      try {
+        const token = await getToken(messaging);
+        tokenExists = !!token;
+      } catch (error) {
+        console.warn('Erro ao verificar token:', error);
+      }
+    }
+
+    return {
+      available,
+      permission,
+      tokenExists,
+      vapidKeyConfigured
+    };
+  }
+
+  // ========== MÉTODOS AUXILIARES ==========
+
+  private static getPlatform(): string {
+    const userAgent = navigator.userAgent.toLowerCase();
+
+    if (userAgent.includes('android')) return 'android';
+    if (userAgent.includes('iphone') || userAgent.includes('ipad')) return 'ios';
+    if (userAgent.includes('windows')) return 'windows';
+    if (userAgent.includes('mac')) return 'macos';
+    if (userAgent.includes('linux')) return 'linux';
+
+    return 'web';
+  }
+
+  private static async showLocalForegroundNotification(
+    title: string,
+    body: string,
+    data?: any
+  ): Promise<void> {
+    // Usar a notificação local existente como fallback
+    await this.sendLocalNotification(title, body, {
+      icon: '/icons/icon-192x192.png',
+      data: data,
+      requireInteraction: false
+    });
+  }
 
   // 1. SOLICITAR PERMISSÃO PARA NOTIFICAÇÕES LOCAIS
   static async requestNotificationPermission(): Promise<NotificationPermission> {
     try {
-      if (!('Notification' in window)) {
-        throw new Error('Este navegador não suporta notificações');
+      // Primeiro tentar com FCM se disponível
+      const fcmAvailable = await this.checkFCMAvailability();
+
+      if (fcmAvailable.available && fcmAvailable.vapidKeyConfigured) {
+        // Usar FCM
+        const permission = await Notification.requestPermission();
+        return permission;
+      } else {
+        // Fallback para notificações locais
+        return "default"; //COMENTADO
       }
-
-      const permission = await Notification.requestPermission();
-
-      console.log('Permissão para notificações:', permission);
-
-      if (permission === 'granted') {
-        console.log('✅ Permissão concedida para notificações');
-        this.savePermissionGranted();
-      }
-
-      return permission;
     } catch (error) {
       console.error('Erro ao solicitar permissão:', error);
       return 'denied';
@@ -52,12 +290,10 @@ export class NotificationService {
       if (!('Notification' in window)) {
         throw new Error('Notificações não suportadas');
       }
-
       if (Notification.permission !== 'granted') {
-        console.warn('Permissão para notificações não concedida');
+        console.warn('Permissão não concedida');
         return false;
       }
-
       const notification = new Notification(title, {
         body,
         icon: '/icons/icon-192x192.png',
@@ -66,19 +302,13 @@ export class NotificationService {
         requireInteraction: false,
         ...options
       });
-
-      // Adicionar evento de clique
       notification.onclick = () => {
         notification.close();
         window.focus();
-
-        // Se tiver URL nos dados, redirecionar
         if (options?.data?.url) {
           window.location.href = options.data.url;
         }
       };
-
-      // Salvar no histórico
       await this.saveNotificationToHistory({
         title,
         body,
@@ -86,7 +316,6 @@ export class NotificationService {
         channels: ['in_app'],
         data: options?.data
       });
-
       return true;
     } catch (error) {
       console.error('Erro ao enviar notificação local:', error);
@@ -231,64 +460,94 @@ export class NotificationService {
     }
   }
 
-  // ATUALIZAR testNotification
-  static async testNotification(): Promise<boolean> {
+  static async diagnoseConnection(): Promise<{
+    emulatorReachable: boolean;
+    functionsEndpoint: string;
+    timestamp: string;
+  }> {
     try {
-      console.log('=== INICIANDO TESTE DE NOTIFICAÇÃO ===');
+      // CORREÇÃO: Usar localhost ou 127.0.0.1 baseado no que realmente funciona
+      const baseUrl = process.env.NODE_ENV === 'development'
+        ? 'http://localhost:5001'  // ← VOLTAR para localhost (mais padrão)
+        : `https://southamerica-east1-${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.cloudfunctions.net`;
 
-      // 1. Verificar Service Worker
-      const swStatus = await this.checkServiceWorkerStatus();
-      console.log('Status SW:', swStatus);
+      const endpoint = `${baseUrl}/projeto-nexus-62ebb/southamerica-east1/healthCheck`;
 
-      if (!swStatus.active) {
-        console.error('❌ Service Worker não está ativo');
-        throw new Error('Service Worker não está ativo. Recarregue a página.');
+      // CORREÇÃO: Adicionar modo 'cors' explicitamente
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        mode: 'cors', // ← ADICIONAR ESTE PARÂMETRO
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      return {
+        emulatorReachable: response.ok,
+        functionsEndpoint: endpoint,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Diagnose connection error:', error);
+      return {
+        emulatorReachable: false,
+        functionsEndpoint: 'error',
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  // ATUALIZAR testNotification
+  static async testNotification(userId?: string): Promise<boolean> {
+    // Agora testa FCM primeiro, depois fallback
+    try {
+      console.log('=== TESTE DE NOTIFICAÇÃO COM FCM ===');
+
+      // USAR userId REAL se fornecido, senão usar o teste
+      const targetUserId = userId || 'test_user_id';
+
+      console.log(`🎯 Usuário alvo: ${targetUserId}`);
+
+      // PRIMEIRO: Diagnóstico de conexão
+      const connection = await this.diagnoseConnection();
+      console.log('🔍 Diagnóstico de conexão:', connection);
+
+      if (!connection.emulatorReachable && process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Emulador não está acessível. Execute: firebase emulators:start --only functions');
       }
 
-      // 2. Verificar permissão
-      if (Notification.permission !== 'granted') {
-        console.log('Solicitando permissão...');
-        const permission = await this.requestNotificationPermission();
-        if (permission !== 'granted') {
-          throw new Error('Permissão não concedida');
+      // 1. Verificar FCM
+      const fcmStatus = await this.checkFCMAvailability();
+      console.log('Status FCM:', fcmStatus);
+
+      if (fcmStatus.available && fcmStatus.tokenExists) {
+        // Testar com FCM usando ID correto
+        const testResult = await this.sendFCMPushNotification(
+          targetUserId, // ← USAR userId correto
+          '✅ Teste FCM Funcionando',
+          'Esta é uma notificação de teste via Firebase Cloud Messaging',
+          { test: true, timestamp: new Date().toISOString() }
+        );
+
+        if (testResult) {
+          console.log('✅ Teste FCM bem-sucedido');
+          return true;
         }
       }
 
-      // 3. Tentar via Service Worker primeiro
-      if (swStatus.active && 'serviceWorker' in navigator) {
-        console.log('Enviando via Service Worker...');
-        const registration = await navigator.serviceWorker.ready;
-
-        // Enviar mensagem para SW
-        registration.active?.postMessage({
-          type: 'SHOW_NOTIFICATION',
-          title: '✅ Teste Funcionando',
-          body: 'Notificação via Service Worker!',
-          data: {
-            test: true,
-            timestamp: new Date().toISOString(),
-            route: '/student/dashboard'
-          }
-        });
-
-        console.log('✅ Mensagem enviada para SW');
-        return true;
-      }
-
-      // 4. Fallback: notificação direta
-      console.log('Tentando notificação direta...');
+      // 2. Fallback para teste local
+      console.log('Usando fallback local...');
       return await this.sendLocalNotification(
-        'Teste Direto',
-        'Notificação de teste',
+        'Teste Local',
+        'Notificação de teste (fallback)',
         {
           icon: '/icons/icon-192x192.png',
-          requireInteraction: true
+          requireInteraction: true,
+          data: { test: true, mode: 'local_fallback' }
         }
       );
 
     } catch (error: any) {
       console.error('❌ Erro no teste:', error);
-      throw error;
+      return false;
     }
   }
 
@@ -412,24 +671,13 @@ export class NotificationService {
         collection(firestore, this.PREFERENCES_COLLECTION),
         where('userId', '==', userId)
       );
-
       const snapshot = await getDocs(q);
-
       if (snapshot.empty) {
-        // Criar preferências padrão com TODOS os tipos
         const defaultPrefs: UserNotificationPreferences = {
           userId,
           enabled: true,
-          channels: {
-            push: true,
-            in_app: true,
-            email: false,
-            sms: false
-          },
-          allowedHours: {
-            start: "08:00",
-            end: "21:00"
-          },
+          channels: { push: true, in_app: true, email: false, sms: false },
+          allowedHours: { start: "08:00", end: "21:00" },
           allowedDays: [0, 1, 2, 3, 4, 5, 6],
           types: {
             activity_reminder: true,
@@ -448,14 +696,10 @@ export class NotificationService {
           },
           updatedAt: new Date()
         };
-
         await addDoc(collection(firestore, this.PREFERENCES_COLLECTION), defaultPrefs);
         return defaultPrefs;
       }
-
       const data = snapshot.docs[0].data();
-
-      // Garantir que o objeto retornado tenha todos os campos necessários
       const userPrefs: UserNotificationPreferences = {
         userId: data.userId || userId,
         enabled: data.enabled !== undefined ? data.enabled : true,
@@ -465,10 +709,7 @@ export class NotificationService {
           email: data.channels?.email !== undefined ? data.channels.email : false,
           sms: data.channels?.sms !== undefined ? data.channels.sms : false
         },
-        allowedHours: data.allowedHours || {
-          start: "08:00",
-          end: "21:00"
-        },
+        allowedHours: data.allowedHours || { start: "08:00", end: "21:00" },
         allowedDays: data.allowedDays || [0, 1, 2, 3, 4, 5, 6],
         types: {
           activity_reminder: data.types?.activity_reminder !== undefined ? data.types.activity_reminder : true,
@@ -488,9 +729,7 @@ export class NotificationService {
         },
         updatedAt: data.updatedAt?.toDate() || new Date()
       };
-
       return userPrefs;
-
     } catch (error) {
       console.error('Erro ao buscar preferências:', error);
       return null;
@@ -575,17 +814,6 @@ export class NotificationService {
       console.error('Erro em sendTestNotification:', error);
       return false;
     }
-  }
-
-  // 7. MÉTODO PARA SETUP FOREGROUND LISTENER (se necessário)
-  static setupForegroundMessageListener(callback: (payload: any) => void): () => void {
-    // Simulação para ambiente local
-    console.log('Foreground listener configurado (simulado)');
-
-    // Retorna função para "desinscrever"
-    return () => {
-      console.log('Foreground listener removido');
-    };
   }
 
   // 8. MÉTODO PARA OBTER TOKEN (simulado para ambiente local)

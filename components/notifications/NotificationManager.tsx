@@ -19,6 +19,7 @@ export default function NotificationManager() {
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showIOSModal, setShowIOSModal] = useState(false);
+  const [fcmStatus, setFcmStatus] = useState<{ available: boolean; tokenExists: boolean; } | null>(null);
 
   const showIOSInstructions = () => {
     setShowIOSModal(true);
@@ -27,8 +28,14 @@ export default function NotificationManager() {
   useEffect(() => {
     if (user) {
       checkNotificationStatus();
+      checkFCMStatus(); // NOVO
     }
   }, [user]);
+
+  const checkFCMStatus = async () => {
+    const status = await NotificationService.checkFCMAvailability();
+    setFcmStatus(status);
+  };
 
   const checkNotificationStatus = async () => {
     const status = await NotificationService.checkNotificationSupport();
@@ -42,23 +49,26 @@ export default function NotificationManager() {
     setError(null);
 
     try {
+      // Usar o método atualizado que tenta FCM primeiro
       const permission = await NotificationService.requestNotificationPermission();
 
       if (permission === 'granted') {
-        // Atualizar status
-        await checkNotificationStatus();
-        console.log('✅ Notificações ativadas com sucesso!');
+        // Agora também tenta obter token FCM
+        if (user?.id) {
+          const token = await NotificationService.requestFCMToken(user.id);
+          if (token) {
+            console.log('✅ Token FCM registrado com sucesso');
+          }
+        }
 
-        // Mostrar feedback visual
+        await checkNotificationStatus();
+        await checkFCMStatus(); // Atualizar status FCM
         showSuccessMessage();
       } else if (permission === 'denied') {
-        setError('Permissão para notificações foi negada. Você pode alterar nas configurações do navegador.');
-      } else {
-        setError('Permissão para notificações não foi concedida.');
+        setError('Permissão para notificações foi negada...');
       }
     } catch (err: any) {
       setError(err.message || 'Erro ao ativar notificações');
-      console.error('Erro ao solicitar permissão:', err);
     } finally {
       setIsLoading(false);
     }
@@ -104,12 +114,12 @@ export default function NotificationManager() {
   const showGenericInstructions = () => {
     const instructions = `Para configurar notificações:
       
-1. Clique no cadeado 🔒 na barra de endereços
-2. Procure por "Notificações" ou "Permissões"
-3. Altere para "Permitir"
-4. Recarregue a página
-      
-Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
+      1. Clique no cadeado 🔒 na barra de endereços
+      2. Procure por "Notificações" ou "Permissões"
+      3. Altere para "Permitir"
+      4. Recarregue a página
+            
+      Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
 
     alert(instructions);
   };
@@ -118,36 +128,23 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
     try {
       setIsLoading(true);
 
-      // Feedback visual
-      console.log('Iniciando teste no mobile...');
+      // ⚠️ CORREÇÃO: Passar o userId REAL do usuário logado
+      const currentUserId = user?.id; // do useAuth()
 
-      const success = await NotificationService.testNotification();
+      console.log('🧪 Testando notificação para usuário:', currentUserId);
+
+      // Usar o método atualizado passando o userId real
+      const success = await NotificationService.testNotification(currentUserId);
 
       if (success) {
-        // Feedback no mobile
-        alert('✅ Notificação enviada!\n\nSe não aparecer:\n1. Verifique se o som está ligado\n2. Veja a barra de notificações\n3. O ícone pode aparecer pequeno');
-
-        // Log adicional
-        console.log('✅ Teste bem-sucedido no mobile');
+        alert('✅ Notificação enviada com sucesso!\n\nVerifique sua barra de notificações.');
       } else {
-        // Diagnosticar problema
-        const status = await NotificationService.checkNotificationSupport();
-
-        let errorMsg = 'Não foi possível enviar a notificação.\n';
-
-        if (!status.serviceWorker) {
-          errorMsg += '\n• Service Worker não está ativo';
-        }
-        if (status.permission !== 'granted') {
-          errorMsg += '\n• Permissão não concedida';
-        }
-
-        alert(`❌ ${errorMsg}\n\nTente:\n1. Recarregar a página\n2. Limpar cache do navegador\n3. Verificar configurações do site`);
+        alert('⚠️ Notificação enviada via fallback local.\n\nO FCM não pôde ser usado (usuário sem token registrado).');
       }
 
     } catch (err: any) {
-      console.error('Erro no teste mobile:', err);
-      alert(`Erro: ${err.message || 'Desconhecido'}\n\nTente em "Site para computador"`);
+      console.error('Erro no teste:', err);
+      alert(`❌ Erro: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -321,6 +318,20 @@ Ou acesse: Configurações do Navegador → Privacidade → Notificações`;
           </button>
         </div>
       </div>
+
+      {notificationStatus?.permission === 'granted' && fcmStatus && (
+        <div className="mt-2 text-xs">
+          {fcmStatus.available ? (
+            fcmStatus.tokenExists ? (
+              <span className="text-green-600">✓ FCM ativo (notificações push)</span>
+            ) : (
+              <span className="text-yellow-600">⚠️ FCM disponível mas token não registrado</span>
+            )
+          ) : (
+            <span className="text-gray-500">ℹ️ Usando notificações locais</span>
+          )}
+        </div>
+      )}
 
       {showSettings && (
         <div className="mt-4 pt-4 border-t border-green-200">

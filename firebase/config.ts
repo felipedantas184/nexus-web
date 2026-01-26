@@ -1,9 +1,9 @@
-// firebase/config.ts - COM TIPAGEM CORRIGIDA
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,64 +15,50 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
+// Inicializar Firebase App
 const app = initializeApp(firebaseConfig);
 
+// Serviços principais
 export const auth = getAuth(app);
 export const firestore = getFirestore(app);
 export const storage = getStorage(app);
 
-// Inicialização condicional do FCM
+// Firebase Messaging (FCM) - Inicialização condicional
 let messaging: Messaging | null = null;
 
-// Só inicializar no cliente
 if (typeof window !== 'undefined') {
+  // Só inicializar no cliente
   isSupported().then((supported) => {
     if (supported) {
       try {
         messaging = getMessaging(app);
-        
-        // Verificar se o service worker pode ser registrado
-        if ('serviceWorker' in navigator) {
-          registerServiceWorker();
-        }
+        console.log('✅ Firebase Messaging inicializado');
       } catch (error) {
-        console.error('Erro ao inicializar Firebase Messaging:', error);
+        console.error('❌ Erro ao inicializar Firebase Messaging:', error);
       }
     } else {
-      console.warn('Este navegador não suporta Firebase Messaging');
+      console.warn('⚠️ Este navegador não suporta Firebase Messaging');
     }
   }).catch((error) => {
-    console.error('Erro ao verificar suporte do Firebase Messaging:', error);
+    console.error('❌ Erro ao verificar suporte do Firebase Messaging:', error);
   });
 }
 
-// Função para registrar service worker
-async function registerServiceWorker() {
+// Firebase Functions
+const functions = getFunctions(app, 'southamerica-east1');
+
+// Em desenvolvimento, conectar ao emulador
+// MODIFICAR a configuração do emulador
+if (process.env.NODE_ENV === 'development') {
   try {
-    // Registrar service worker para notificações
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-      scope: '/',
-      updateViaCache: 'none'
-    });
+    // MANTER assim - está correto
+    connectFunctionsEmulator(functions, 'localhost', 5001);
+    console.log('🔧 Firebase Functions conectado ao emulador');
     
-    console.log('✅ Service Worker registrado com sucesso:', registration.scope);
-    
-    // Verificar se está ativo
-    if (registration.active) {
-      console.log('Service Worker está ativo');
-    }
-    
-    // Configurar o messaging para usar este service worker
-    if (messaging) {
-      // Em produção, o FCM usará automaticamente o service worker registrado
-    }
-    
-    return registration;
   } catch (error) {
-    console.error('❌ Erro ao registrar Service Worker:', error);
-    return null;
+    console.warn('⚠️ Não foi possível conectar ao emulador de Functions:', error);
   }
 }
 
-export { messaging };
+export { messaging, functions };
 export default app;

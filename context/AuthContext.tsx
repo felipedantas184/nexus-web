@@ -8,6 +8,9 @@ import { AuthContextType, User, LoginResult, RegisterResult, AuthError } from '@
 import { usePathname, useRouter } from 'next/navigation';
 import { AuthService } from '@/lib/auth/AuthService';
 import { UserService } from '@/lib/auth/UserService';
+import { NotificationService } from '@/lib/services/NotificationService';
+import { getToken } from 'firebase/messaging';
+import { messaging } from '@/firebase/config';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -22,7 +25,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       // Primeiro, determinar tipo de usuário
       const userType = await UserService.getUserType(userId);
-      
+
       // Buscar dados completos
       const userData = await UserService.getUser(userId, userType);
       return userData as User;
@@ -37,12 +40,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       const result = await AuthService.login(email, password);
-      
+
       // Buscar dados completos do usuário
       const userData = await fetchUserData(result.userId);
       if (userData) {
         setUser(userData);
-        
+
         // Redirecionar baseado no tipo
         if (result.userType === 'professional') {
           router.push('/professional/dashboard');
@@ -50,7 +53,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           router.push('/student/dashboard');
         }
       }
-      
+
+      if (result.success) {
+        // REGISTRAR TOKEN FCM APÓS LOGIN BEM-SUCEDIDO
+        try {
+          // Aguardar um pouco para garantir que o usuário está carregado
+          setTimeout(async () => {
+            if (user && user.id) {
+              console.log('🔄 Registrando token FCM para notificações...');
+
+              // Solicitar permissão e token FCM
+              const token = await NotificationService.requestFCMToken(user.id);
+
+              if (token) {
+                console.log('✅ Token FCM registrado com sucesso');
+
+                // Configurar listener para mensagens em foreground
+                NotificationService.setupForegroundMessageListener((payload) => {
+                  console.log('Notificação recebida em foreground:', payload);
+                  // Aqui você pode mostrar um toast ou atualizar UI
+                });
+              } else {
+                console.log('⚠️ Token FCM não obtido (usuário pode ter negado)');
+              }
+            }
+          }, 1000);
+        } catch (fcmError) {
+          console.warn('⚠️ Erro ao registrar token FCM:', fcmError);
+          // Não falhar o login por causa do FCM
+        }
+      }
+
       return result;
     } catch (error: any) {
       console.error('Login error in context:', error);
@@ -65,14 +98,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       const result = await AuthService.register(data);
-      
+
       // Se registro foi bem sucedido, fazer login automático
       if (result.success && result.userId) {
         // Em produção, aqui faríamos login automático ou redirecionaria para confirmação
         // Por enquanto, redirecionar para login
         router.push('/login');
       }
-      
+
       return result;
     } catch (error: any) {
       console.error('Registration error in context:', error);
@@ -85,11 +118,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Logout com redirecionamento
   const logout = async (): Promise<void> => {
     try {
+      // 1️⃣ Remover token FCM ANTES de limpar o usuário
+      if (user?.id && messaging) {
+        try {
+          const currentToken = await getToken(messaging);
+          if (currentToken) {
+            await NotificationService.removeFCMToken(user.id, currentToken);
+          }
+        } catch (tokenError) {
+          console.warn('⚠️ Erro ao remover token FCM:', tokenError);
+        }
+      }
+
+
+      // 2️⃣ Logout do Firebase/AuthService
       await AuthService.logout();
+
+      // 3️⃣ Limpar estado local
       setUser(null);
+
+      // 4️⃣ Redirecionar
       router.push('/login');
+
     } catch (error: any) {
-      console.error('Logout error:', error);
+      console.error('❌ Erro no logout:', error);
       throw error;
     }
   };
@@ -117,26 +169,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Redirecionamento baseado em autenticação - LÓGICA SIMPLIFICADA
   useEffect(() => {
     if (loading) return;
-    
+
     const publicPaths = ['/login', '/register', '/', '/forgot-password'];
     const isPublicPath = publicPaths.includes(pathname);
-    
+
     // Se não está logado e está tentando acessar área privada
     if (!user && !isPublicPath) {
       router.push('/login');
       return;
     }
-    
+
     // Se está logado e está em página pública
     if (user && isPublicPath) {
       // Redirecionar para dashboard apropriado
-      const targetPath = user.role === 'student' 
-        ? '/student/dashboard' 
+      const targetPath = user.role === 'student'
+        ? '/student/dashboard'
         : '/professional/dashboard';
       router.push(targetPath);
       return;
     }
-    
+
     // Se está logado e tenta acessar área do tipo errado
     if (user) {
       if (user.role === 'student' && pathname.startsWith('/professional')) {

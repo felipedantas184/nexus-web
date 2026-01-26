@@ -1,103 +1,149 @@
-// public/firebase-messaging-sw.js - VERSÃO CORRIGIDA E SIMPLIFICADA
-console.log('[Service Worker] 🚀 Iniciando...');
+// Importar scripts do Firebase via importScripts
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
-// 1. INSTALAÇÃO
-self.addEventListener('install', (event) => {
-  console.log('[SW] 📦 Instalando...');
-  // Pular espera - IMPORTANTE
-  event.waitUntil(self.skipWaiting());
+console.log('[Service Worker] 🚀 Iniciando com Firebase...');
+
+// Configuração do Firebase (mesma do frontend)
+firebase.initializeApp({
+  apiKey: 'AIzaSyCLQZbL3OJkjDd7_c4IHnDKQQrTdodqUQs',
+  authDomain: 'nexus-platform-92bb4.firebaseapp.com',
+  projectId: 'nexus-platform-92bb4',
+  storageBucket: 'nexus-platform-92bb4.appspot.com',
+  messagingSenderId: '1093617052984',
+  appId: '1:1093617052984:web:64b921911222625c447195',
+  measurementId: 'G-LLCJJ69D55'
 });
 
-// 2. ATIVAÇÃO
-self.addEventListener('activate', (event) => {
-  console.log('[SW] ✅ Ativando...');
-  // Tomar controle imediato de todos os clients
-  event.waitUntil(self.clients.claim());
-});
+const messaging = firebase.messaging();
 
-// 3. FETCH HANDLER (OBRIGATÓRIO para Service Worker ativo)
-self.addEventListener('fetch', (event) => {
-  // Handler vazio - só para manter SW ativo
-  // Pode passar direto ou adicionar cache depois
-  return; // ou event.respondWith(fetch(event.request))
-});
-
-// 4. PUSH HANDLER (notificações)
-self.addEventListener('push', (event) => {
-  console.log('[SW] 📬 Evento push recebido');
+// 1. BACKGROUND MESSAGE HANDLER (FCM)
+messaging.onBackgroundMessage((payload) => {
+  console.log('[SW] 📬 Mensagem em background recebida:', payload);
   
-  let title = 'Nexus Platform';
-  let body = 'Você tem novas atividades!';
-  let icon = '/icons/icon-192x192.png';
-  let data = {};
+  const { title, body, data, icon } = payload.notification || {};
   
-  try {
-    if (event.data) {
-      const payload = event.data.json();
-      title = payload.title || title;
-      body = payload.body || body;
-      icon = payload.icon || icon;
-      data = payload.data || {};
-    }
-  } catch (e) {
-    // Se não for JSON, usar texto
-    body = event.data.text() || body;
-  }
-  
-  const options = {
-    body: body,
-    icon: icon,
+  const notificationOptions = {
+    body: body || 'Você tem novas atividades!',
+    icon: icon || '/icons/icon-192x192.png',
     badge: '/icons/badge-72x72.png',
-    data: data,
-    tag: 'nexus-push',
+    data: data || payload.data || {},
+    tag: 'nexus-fcm-background',
     vibrate: [200, 100, 200],
-    requireInteraction: false
+    requireInteraction: false,
+    actions: [
+      {
+        action: 'open_dashboard',
+        title: 'Abrir Dashboard'
+      },
+      {
+        action: 'dismiss',
+        title: 'Fechar'
+      }
+    ]
   };
   
-  event.waitUntil(
-    self.registration.showNotification(title, options)
+  return self.registration.showNotification(
+    title || 'Nexus Platform',
+    notificationOptions
   );
 });
 
-// 5. MESSAGE HANDLER (para testes)
+// 2. INSTALAÇÃO
+self.addEventListener('install', (event) => {
+  console.log('[SW] 📦 Instalando Service Worker...');
+  event.waitUntil(self.skipWaiting());
+});
+
+// 3. ATIVAÇÃO
+self.addEventListener('activate', (event) => {
+  console.log('[SW] ✅ Ativando Service Worker...');
+  event.waitUntil(self.clients.claim());
+});
+
+// 4. FETCH HANDLER (Cache para performance)
+self.addEventListener('fetch', (event) => {
+  // Cache-first para assets estáticos
+  if (event.request.url.includes('/_next/static/') || 
+      event.request.url.includes('/icons/')) {
+    event.respondWith(
+      caches.match(event.request).then(response => {
+        return response || fetch(event.request);
+      })
+    );
+  }
+});
+
+// 5. NOTIFICATION CLICK HANDLER
+self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] 🔔 Notificação clicada:', event.notification.data);
+  
+  event.notification.close();
+  
+  const urlToOpen = event.notification.data?.route || 
+                   event.notification.data?.url || 
+                   '/student/dashboard';
+  
+  // Verificar ação do botão
+  if (event.action === 'open_dashboard') {
+    // Abrir dashboard específico
+    openClientUrl('/student/dashboard');
+  } else if (event.action === 'dismiss') {
+    // Apenas fechar
+    return;
+  } else {
+    // Clique na notificação
+    const activityId = event.notification.data?.activityId;
+    if (activityId) {
+      openClientUrl(`/student/activity/${activityId}`);
+    } else {
+      openClientUrl(urlToOpen);
+    }
+  }
+  
+  function openClientUrl(url) {
+    event.waitUntil(
+      clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true
+      }).then((windowClients) => {
+        for (const client of windowClients) {
+          if (client.url.includes(url) && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        if (clients.openWindow) {
+          return clients.openWindow(url);
+        }
+      })
+    );
+  }
+});
+
+// 6. MESSAGE HANDLER (para testes do frontend)
 self.addEventListener('message', (event) => {
-  console.log('[SW] 📩 Mensagem recebida:', event.data);
+  console.log('[SW] 📩 Mensagem recebida do frontend:', event.data);
   
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
-    const { title = 'Teste', body = 'Mensagem de teste' } = event.data;
+    const { title = 'Teste', body = 'Mensagem de teste', data } = event.data;
     
     self.registration.showNotification(title, {
       body: body,
       icon: '/icons/icon-192x192.png',
       badge: '/icons/badge-72x72.png',
+      data: data,
       tag: 'test-notification',
       vibrate: [100, 50, 100]
     });
   }
+  
+  if (event.data && event.data.type === 'PING') {
+    event.ports[0].postMessage({
+      type: 'PONG',
+      timestamp: new Date().toISOString(),
+      swVersion: '2.0.0-fcm'
+    });
+  }
 });
 
-// 6. NOTIFICATION CLICK
-self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] 🔔 Notificação clicada');
-  event.notification.close();
-  
-  const urlToOpen = event.notification.data?.url || '/student/dashboard';
-  
-  event.waitUntil(
-    clients.matchAll({
-      type: 'window',
-      includeUncontrolled: true
-    }).then((windowClients) => {
-      for (const client of windowClients) {
-        if (client.url.includes(urlToOpen) && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
-    })
-  );
-});
-
-console.log('[Service Worker] ✅ Configurado com sucesso!');
+console.log('[Service Worker] ✅ Configurado com Firebase Messaging!');
