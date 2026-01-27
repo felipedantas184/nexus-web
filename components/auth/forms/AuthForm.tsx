@@ -97,7 +97,7 @@ interface AuthFormProps {
 
 export default function AuthForm({
   mode,
-  defaultUserType = 'professional',
+  defaultUserType = 'student',
   onSuccess,
   onError
 }: AuthFormProps) {

@@ -44,3 +44,22 @@ export const GRADES = [
   '2º ano EM',
   '3º ano EM'
 ] as const;
+
+// Adicione estas arrays de opções (pode mover para um arquivo de constants depois)
+export const SCHOOL_OPTIONS = [
+  { value: 'instituto-dom-barreto', label: 'Instituto Dom Barreto' },
+  { value: 'bright-bee', label: 'Bright Bee' },
+  { value: 'lerote', label: 'Lerote' },
+  { value: 'great-school', label: 'Great School' },
+];
+
+export const GRADE_OPTIONS = [
+  { value: '6ano-ef', label: '6º Ano do Ensino Fundamental' },
+  { value: '7ano-ef', label: '7º Ano do Ensino Fundamental' },
+  { value: '8ano-ef', label: '8º Ano do Ensino Fundamental' },
+  { value: '9ano-ef', label: '9º Ano do Ensino Fundamental' },
+  { value: '1ano-em', label: '1º Ano do Ensino Médio' },
+  { value: '2ano-em', label: '2º Ano do Ensino Médio' },
+  { value: '3ano-em', label: '3º Ano do Ensino Médio' },
+  { value: 'pre-vestibular', label: 'Pré-Vestibular' },
+];

@@ -52,7 +52,7 @@ export class AuthService {
 
       // 4. Buscar tipo de usuário
       const userType = await UserService.getUserType(userId);
-      
+
       // 5. Atualizar último login
       await UserService.updateLastLogin(userId);
 
@@ -63,7 +63,7 @@ export class AuthService {
       });
 
       // 7. Verificar se precisa de 2FA (para profissionais)
-      const requiresMFA = userType === 'professional' && 
+      const requiresMFA = userType === 'professional' &&
         process.env.NEXT_PUBLIC_REQUIRE_2FA === 'true';
 
       console.log('✅ Login successful:', { userId, userType, requiresMFA });
@@ -135,7 +135,7 @@ export class AuthService {
 
       console.log('✅ Registration successful:', userId);
 
-      const requiresVerification = data.type === 'professional' && 
+      const requiresVerification = data.type === 'professional' &&
         process.env.NEXT_PUBLIC_REQUIRE_PROFESSIONAL_VERIFICATION === 'true';
 
       return {
@@ -193,7 +193,7 @@ export class AuthService {
       profile: {
         cpf: encryptedCPF,
         birthday: new Date(data.birthday),
-        phone: data.phone,
+        phone: data.phone || '',
         school: data.school,
         grade: data.grade,
         assignedProfessionals: [],
@@ -276,7 +276,7 @@ export class AuthService {
   private static async checkCPFExists(cpf: string): Promise<boolean> {
     try {
       const encryptedCPF = encryptData(cpf);
-      
+
       // Verificar em students
       const studentsQuery = query(
         collection(firestore, 'students'),
@@ -305,7 +305,7 @@ export class AuthService {
       const now = Date.now();
       const windowMs = 15 * 60 * 1000; // 15 minutos
       const maxAttempts = 5;
-      
+
       // Buscar tentativas recentes do Firestore
       const rateLimitRef = collection(firestore, 'rate_limits');
       const q = query(
@@ -313,21 +313,21 @@ export class AuthService {
         where('email', '==', email),
         where('timestamp', '>', new Date(now - windowMs))
       );
-      
+
       const snapshot = await getDocs(q);
       const recentAttempts = snapshot.docs.length;
-      
+
       if (recentAttempts >= maxAttempts) {
         return false;
       }
-      
+
       // Registrar nova tentativa
       await setDoc(doc(rateLimitRef), {
         email,
         timestamp: new Date(now),
         type: 'login_attempt'
       });
-      
+
       return true;
     } catch (error) {
       console.error('Rate limit check failed:', error);

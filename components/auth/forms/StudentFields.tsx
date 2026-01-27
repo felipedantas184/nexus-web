@@ -6,6 +6,7 @@ import InputField from '../ui/InputField';
 import { FaIdCard, FaBirthdayCake, FaPhone, FaSchool, FaGraduationCap } from 'react-icons/fa';
 import { formatters } from '@/lib/utils/formatters';
 import { cpfValidator } from '@/lib/validation';
+import { GRADE_OPTIONS, SCHOOL_OPTIONS } from '@/lib/utils/constants';
 
 interface StudentFieldsProps {
   register: any;
@@ -67,21 +68,21 @@ export default function StudentFields({
 
       <InputField
         label="Escola"
-        type="text"
+        type="select"
         icon={<FaSchool className="w-3.5 h-3.5" />}
-        placeholder="Nome da instituição"
         error={errors.school?.message}
-        {...register('school')}
+        options={SCHOOL_OPTIONS}
+        {...register('school', { required: 'Selecione a escola' })}
         disabled={loading}
       />
 
       <InputField
         label="Série/Ano"
-        type="text"
+        type="select"
         icon={<FaGraduationCap className="w-3.5 h-3.5" />}
-        placeholder="Selecione a série"
         error={errors.grade?.message}
-        {...register('grade')}
+        options={GRADE_OPTIONS}
+        {...register('grade', { required: 'Selecione a série/ano' })}
         disabled={loading}
       />
     </>
