@@ -42,15 +42,6 @@ export default function LoginPage() {
                 Esqueceu a senha?
               </Link>
             </div>
-            <div className="mt-4 text-sm">
-              <Link 
-                href="/register?type=student" 
-                className="flex items-center gap-2 text-purple-600 font-semibold hover:text-purple-700 transition-colors"
-              >
-                <FaUserGraduate className="w-3.5 h-3.5" />
-                Sou aluno
-              </Link>
-            </div>
           </div>
         }
       >

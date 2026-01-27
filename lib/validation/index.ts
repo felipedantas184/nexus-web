@@ -1,4 +1,3 @@
-// lib/validation/index.ts
 import { RegisterData, ValidationResult } from '@/types';
 import { cpfValidator } from './cpfValidator';
 import { emailValidator } from './emailValidator';
@@ -22,14 +21,17 @@ export class ValidationService {
     if (!passwordValidation.valid) errors.push(passwordValidation.error!);
 
     // Validações específicas por tipo
-    /** COMENTADO
     if (data.type === 'student') {
       const studentValidation = await this.validateStudentData(data);
-      if (!studentValidation.valid) errors.push(...(studentValidation.metadata?.errors || []));
+      if (!studentValidation.valid) {
+        errors.push(...(studentValidation.metadata?.errors || []));
+      }
     } else {
       const professionalValidation = await this.validateProfessionalData(data);
-      if (!professionalValidation.valid) errors.push(...(professionalValidation.metadata?.errors || []));
-    } */
+      if (!professionalValidation.valid) {
+        errors.push(...(professionalValidation.metadata?.errors || []));
+      }
+    }
 
     if (errors.length > 0) {
       return {
@@ -166,28 +168,30 @@ export class ValidationService {
     return { valid: true };
   }
 
-  // Validação de dados do profissional
-  /** COMENTADO
+  // Validação de dados do profissional - ATUALIZADO
   private static async validateProfessionalData(data: RegisterData): Promise<ValidationResult> {
     const errors: string[] = [];
 
+    // CPF é obrigatório para profissionais
+    if (!data.cpf) {
+      errors.push('CPF é obrigatório');
+    } else {
+      const cpfValidation = cpfValidator.validate(data.cpf);
+      if (!cpfValidation.valid) errors.push(cpfValidation.error!);
+    }
+
+    // Role é obrigatório
     if (!data.role) {
       errors.push('Função profissional é obrigatória');
     }
 
-    if (!data.licenseNumber) {
-      errors.push('Registro profissional (CRM/CRP) é obrigatório');
-    } else {
-      const licenseValidation = professionalValidator.validateLicenseNumber(
-        data.licenseNumber,
-        data.role
-      );
-      if (!licenseValidation.valid) errors.push(licenseValidation.error!);
-    }
+    // LicenseNumber, specialization, institution são opcionais no registro inicial
 
-    // Validação de email institucional para profissionais
-    const emailValidation = await professionalValidator.validateEmail(data.email);
-    if (!emailValidation.valid) errors.push(emailValidation.error!);
+    // Validação de email institucional (opcional por enquanto)
+    if (process.env.NEXT_PUBLIC_REQUIRE_INSTITUTIONAL_EMAIL === 'true') {
+      const emailValidation = await professionalValidator.validateEmail(data.email);
+      if (!emailValidation.valid) errors.push(emailValidation.error!);
+    }
 
     if (errors.length > 0) {
       return {
@@ -198,7 +202,7 @@ export class ValidationService {
     }
 
     return { valid: true };
-  } */
+  }
 
   // Avaliar força da senha
   private static getPasswordStrength(password: string): { score: number; label: string } {

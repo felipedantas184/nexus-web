@@ -19,18 +19,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const [profileReady, setProfileReady] = useState(false);
+
 
   // Função para buscar usuário completo
   const fetchUserData = async (userId: string): Promise<User | null> => {
-    try {
-      // Primeiro, determinar tipo de usuário
+    const getFullData = async () => {
       const userType = await UserService.getUserType(userId);
+      return await UserService.getUser(userId, userType) as User;
+    };
 
-      // Buscar dados completos
-      const userData = await UserService.getUser(userId, userType);
-      return userData as User;
-    } catch (error) {
-      console.error('Error fetching user data:', error);
+    try {
+      const data = await getFullData();
+      setProfileReady(true);
+      return data;
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'User profile not found or inactive') {
+        console.log('⏳ Profile ainda não criado, aguardando...');
+        setProfileReady(false);
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+          const retryData = await getFullData();
+          setProfileReady(true);
+          return retryData;
+        } catch {
+          setProfileReady(false);
+          return null;
+        }
+      }
+
+      setProfileReady(false);
       return null;
     }
   };
@@ -170,26 +190,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (loading) return;
 
+    // 🚨 NOVA TRAVA
+    if (!profileReady) return;
+
     const publicPaths = ['/login', '/register', '/', '/forgot-password'];
     const isPublicPath = publicPaths.includes(pathname);
 
-    // Se não está logado e está tentando acessar área privada
     if (!user && !isPublicPath) {
       router.push('/login');
       return;
     }
 
-    // Se está logado e está em página pública
     if (user && isPublicPath) {
-      // Redirecionar para dashboard apropriado
-      const targetPath = user.role === 'student'
-        ? '/student/dashboard'
-        : '/professional/dashboard';
+      const targetPath =
+        user.role === 'student'
+          ? '/student/dashboard'
+          : '/professional/dashboard';
+
       router.push(targetPath);
       return;
     }
 
-    // Se está logado e tenta acessar área do tipo errado
     if (user) {
       if (user.role === 'student' && pathname.startsWith('/professional')) {
         router.push('/student/dashboard');
@@ -197,7 +218,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         router.push('/professional/dashboard');
       }
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, profileReady, pathname]);
 
   const value: AuthContextType = {
     user,

@@ -66,19 +66,6 @@ export default function StudentFields({
       />
 
       <InputField
-        label="Telefone (opcional)"
-        type="tel"
-        icon={<FaPhone className="w-3.5 h-3.5" />}
-        placeholder="(00) 00000-0000"
-        maxLength={15}
-        error={errors.phone?.message}
-        {...register('phone', {
-          onChange: handlePhoneChange
-        })}
-        disabled={loading}
-      />
-
-      <InputField
         label="Escola"
         type="text"
         icon={<FaSchool className="w-3.5 h-3.5" />}

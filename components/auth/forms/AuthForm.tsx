@@ -40,22 +40,22 @@ const registerSchema = z.object({
   licenseNumber: z.string().optional(),
   institution: z.string().optional(),
 })
-.refine(data => data.password === data.confirmPassword, {
-  message: 'As senhas não coincidem',
-  path: ['confirmPassword']
-})
-.refine(data => {
-  // Validação condicional para registro profissional
-  if (data.type === 'professional') {
-    if (data.role === 'psychologist' || data.role === 'psychiatrist') {
-      return data.licenseNumber && data.licenseNumber.trim().length > 0;
+  .refine(data => data.password === data.confirmPassword, {
+    message: 'As senhas não coincidem',
+    path: ['confirmPassword']
+  })
+  .refine(data => {
+    // Validação condicional para registro profissional
+    if (data.type === 'professional') {
+      if (data.role === 'psychologist' || data.role === 'psychiatrist') {
+        return data.licenseNumber && data.licenseNumber.trim().length > 0;
+      }
     }
-  }
-  return true;
-}, {
-  message: 'Registro profissional é obrigatório para psicólogos e psiquiatras',
-  path: ['licenseNumber']
-});
+    return true;
+  }, {
+    message: 'Registro profissional é obrigatório para psicólogos e psiquiatras',
+    path: ['licenseNumber']
+  });
 
 /* =========================
    TIPO ÚNICO DO FORM
@@ -87,6 +87,8 @@ interface AuthFormProps {
   defaultUserType?: 'student' | 'professional';
   onSuccess?: (result: any) => void;
   onError?: (error: AuthError) => void;
+  onSubmit?: (data: any) => Promise<void>; // ← NOVO
+  loading?: boolean; // ← NOVO
 }
 
 /* =========================
@@ -161,6 +163,7 @@ export default function AuthForm({
             grade: data.grade,
           }),
           ...(userType === 'professional' && {
+            cpf: data.cpf,
             role: data.role as 'psychologist' | 'psychiatrist' | 'monitor' | 'coordinator',
             specialization: data.specialization,
             licenseNumber: data.licenseNumber,
@@ -251,17 +254,17 @@ export default function AuthForm({
       )}
 
       {mode === 'register' && userType === 'student' && (
-        <StudentFields 
-          register={register} 
-          errors={errors} 
-          loading={loading} 
+        <StudentFields
+          register={register}
+          errors={errors}
+          loading={loading}
         />
       )}
 
       {mode === 'register' && userType === 'professional' && (
-        <ProfessionalFields 
-          register={register} 
-          errors={errors} 
+        <ProfessionalFields
+          register={register}
+          errors={errors}
           loading={loading}
           watch={watch}
           setValue={setValue}

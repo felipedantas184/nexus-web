@@ -1,4 +1,3 @@
-// lib/auth/AuthService.ts - SERVIÇO UNIFICADO
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -6,7 +5,7 @@ import {
   updateProfile as updateAuthProfile,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDocs, query, collection, where, limit, getDoc } from 'firebase/firestore';
 import { auth, firestore } from '@/firebase/config';
 import {
   RegisterData,
@@ -33,7 +32,7 @@ export class AuthService {
         throw new AuthError(emailValidation.error!, 'INVALID_EMAIL');
       }
 
-      // 2. Rate limiting check
+      // 2. Rate limiting check (agora usando Firestore)
       const canAttempt = await this.checkRateLimit(email);
       if (!canAttempt) {
         throw new AuthError(
@@ -186,6 +185,8 @@ export class AuthService {
       role: 'student',
       profileComplete: false,
       isActive: true,
+      consentVersion: '1.0', // ← NOVO: Versão do consentimento
+      consentDate: new Date(), // ← NOVO: Data do consentimento
       createdAt: new Date(),
       updatedAt: new Date(),
       lastLoginAt: new Date(),
@@ -208,31 +209,36 @@ export class AuthService {
       ...studentData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      consentDate: serverTimestamp(), // ← NOVO
       'profile.birthday': new Date(data.birthday)
     });
   }
 
   private static async createProfessionalProfile(userId: string, data: RegisterData) {
-    if (!data.role || !data.licenseNumber) {
-      throw new AuthError('Dados do profissional incompletos', 'INCOMPLETE_DATA');
+    if (!data.cpf) { // ← NOVA VALIDAÇÃO: CPF obrigatório
+      throw new AuthError('CPF é obrigatório para profissionais', 'CPF_REQUIRED');
     }
 
     // Criptografar dados sensíveis
-    const encryptedLicense = encryptData(data.licenseNumber);
+    const encryptedCPF = encryptData(data.cpf);
 
     const professionalData: Omit<Professional, 'id'> = {
       email: data.email,
       name: data.name,
       role: data.role || 'coordinator',
-      profileComplete: false,
+      profileComplete: false, // ← Perfil incompleto (campos opcionais faltando)
       isActive: true,
+      consentVersion: '1.0', // ← NOVO: Versão do consentimento
+      consentDate: new Date(), // ← NOVO: Data do consentimento
       createdAt: new Date(),
       updatedAt: new Date(),
       lastLoginAt: new Date(),
       profile: {
-        licenseNumber: encryptedLicense,
-        specialization: data.specialization || '',
-        institution: data.institution || '',
+        cpf: encryptedCPF, // ← NOVO CAMPO OBRIGATÓRIO
+        licenseNumber: '', // ← VAZIO (será preenchido no perfil)
+        specialization: '', // ← VAZIO (será preenchido no perfil)
+        institution: '', // ← VAZIO (será preenchido no perfil)
+        department: '',
         assignedStudents: [],
         canCreatePrograms: data.role === 'coordinator' || data.role === 'psychologist',
         canManageStudents: data.role === 'coordinator',
@@ -244,7 +250,8 @@ export class AuthService {
     await setDoc(doc(firestore, 'professionals', userId), {
       ...professionalData,
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      consentDate: serverTimestamp() // ← NOVO
     });
   }
 
@@ -255,42 +262,77 @@ export class AuthService {
       throw new AuthError('Este email já está em uso', 'EMAIL_EXISTS');
     }
 
-    // Verificar CPF único (para estudantes)
-    if (data.type === 'student' && data.cpf) {
-      const cpfExists = await UserService.checkCPFExists(data.cpf);
+    // Verificar CPF único (para estudantes E profissionais)
+    if (data.cpf) {
+      const cpfExists = await this.checkCPFExists(data.cpf);
       if (cpfExists) {
         throw new AuthError('Este CPF já está cadastrado', 'CPF_EXISTS');
       }
     }
 
-    // Verificar CRM/CRP único (para profissionais)
-    if (data.type === 'professional' && data.licenseNumber) {
-      const licenseExists = await UserService.checkLicenseExists(data.licenseNumber);
-      if (licenseExists) {
-        throw new AuthError('Este registro profissional já está cadastrado', 'LICENSE_EXISTS');
-      }
+    // Removida verificação de licenseNumber (agora opcional)
+  }
+
+  private static async checkCPFExists(cpf: string): Promise<boolean> {
+    try {
+      const encryptedCPF = encryptData(cpf);
+      
+      // Verificar em students
+      const studentsQuery = query(
+        collection(firestore, 'students'),
+        where('profile.cpf', '==', encryptedCPF),
+        limit(1)
+      );
+      const studentsSnapshot = await getDocs(studentsQuery);
+      if (!studentsSnapshot.empty) return true;
+
+      // Verificar em professionals
+      const professionalsQuery = query(
+        collection(firestore, 'professionals'),
+        where('profile.cpf', '==', encryptedCPF),
+        limit(1)
+      );
+      const professionalsSnapshot = await getDocs(professionalsQuery);
+      return !professionalsSnapshot.empty;
+    } catch (error) {
+      console.error('Error checking CPF existence:', error);
+      return false;
     }
   }
 
   private static async checkRateLimit(email: string): Promise<boolean> {
-    // Implementação básica de rate limiting
-    // Em produção, usar Redis ou Firestore com TTL
-    const key = `rate_limit:${email}`;
-    const now = Date.now();
-    const windowMs = 15 * 60 * 1000; // 15 minutos
-    const maxAttempts = 5;
-
-    // Simulação - em produção usar cache real
-    const attempts = JSON.parse(localStorage.getItem(key) || '[]');
-    const recentAttempts = attempts.filter((time: number) => now - time < windowMs);
-
-    if (recentAttempts.length >= maxAttempts) {
-      return false;
+    try {
+      const now = Date.now();
+      const windowMs = 15 * 60 * 1000; // 15 minutos
+      const maxAttempts = 5;
+      
+      // Buscar tentativas recentes do Firestore
+      const rateLimitRef = collection(firestore, 'rate_limits');
+      const q = query(
+        rateLimitRef,
+        where('email', '==', email),
+        where('timestamp', '>', new Date(now - windowMs))
+      );
+      
+      const snapshot = await getDocs(q);
+      const recentAttempts = snapshot.docs.length;
+      
+      if (recentAttempts >= maxAttempts) {
+        return false;
+      }
+      
+      // Registrar nova tentativa
+      await setDoc(doc(rateLimitRef), {
+        email,
+        timestamp: new Date(now),
+        type: 'login_attempt'
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Rate limit check failed:', error);
+      return true; // Em caso de erro, permitir tentativa
     }
-
-    recentAttempts.push(now);
-    localStorage.setItem(key, JSON.stringify(recentAttempts.slice(-maxAttempts)));
-    return true;
   }
 
   private static mapFirebaseAuthError(error: any): AuthError {

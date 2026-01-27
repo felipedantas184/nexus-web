@@ -11,6 +11,8 @@ export interface BaseUser {
   isActive: boolean;
   lastLoginAt?: Date;
   profileComplete: boolean;
+  consentVersion?: string; // ← NOVO: Para LGPD
+  consentDate?: Date; // ← NOVO: Para LGPD
 }
 
 export interface StudentProfile {
@@ -46,9 +48,10 @@ export interface StudentProfile {
 }
 
 export interface ProfessionalProfile {
-  specialization?: string;
-  licenseNumber?: string; // Criptografado
-  institution?: string;
+  cpf: string; // (criptografado)
+  licenseNumber?: string;  
+  specialization?: string; 
+  institution?: string; 
   department?: string;
   assignedStudents: string[];
   canCreatePrograms: boolean;
