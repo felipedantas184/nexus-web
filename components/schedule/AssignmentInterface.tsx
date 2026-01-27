@@ -69,6 +69,12 @@ export default function AssignmentInterface({
     userRole
   } = useScheduleAssignment();
 
+  const getTodayAtMidnight = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  };
+
   const [filteredStudents, setFilteredStudents] = useState<StudentWithStatus[]>([]);
   const [filters, setFilters] = useState({
     search: '',
@@ -80,7 +86,7 @@ export default function AssignmentInterface({
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [assignmentData, setAssignmentData] = useState<AssignScheduleDTO>({
     studentIds: [],
-    startDate: new Date(),
+    startDate: getTodayAtMidnight(), // Data de hoje às 00:00
     allowMultiple: true,
     customizations: {}
   });
@@ -97,13 +103,13 @@ export default function AssignmentInterface({
     const streakScore = Math.min(student.profile.streak * 5, 30);
     const pointsScore = Math.min(student.profile.totalPoints / 100, 40);
     const levelScore = student.profile.level * 10;
-    
+
     return Math.min(streakScore + pointsScore + levelScore, 100);
   };
 
   const normalizeStudents = (students: Student[]): StudentWithStatus[] => {
     return students.map(student => {
-      const isAssigned = isCoordinator 
+      const isAssigned = isCoordinator
         ? true
         : student.profile.assignedProfessionals?.includes('current-user-id') || false;
 
@@ -366,7 +372,7 @@ export default function AssignmentInterface({
                   </p>
                 </div>
               </div>
-              
+
               {schedule && (
                 <div className="flex flex-wrap gap-4 mt-4">
                   <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full">
@@ -382,8 +388,8 @@ export default function AssignmentInterface({
                   <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full">
                     <FaChartBar className="w-4 h-4 text-gray-600" />
                     <span className="text-sm font-medium text-gray-700">
-                      {schedule.category === 'therapeutic' ? 'Terapêutico' : 
-                       schedule.category === 'educational' ? 'Educacional' : 'Misto'}
+                      {schedule.category === 'therapeutic' ? 'Terapêutico' :
+                        schedule.category === 'educational' ? 'Educacional' : 'Misto'}
                     </span>
                   </div>
                 </div>
@@ -599,7 +605,7 @@ export default function AssignmentInterface({
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Alunos Disponíveis</h3>
           <p className="text-gray-600 text-sm mt-1">
-            {selectedStudents.length > 0 
+            {selectedStudents.length > 0
               ? `${selectedStudents.length} aluno(s) selecionado(s)`
               : 'Selecione os alunos que receberão o cronograma'}
           </p>
@@ -622,7 +628,7 @@ export default function AssignmentInterface({
               <p className="text-gray-500 max-w-md mx-auto">
                 {filters.search || filters.grade !== 'all' || filters.school !== 'all' || filters.engagement !== 'all'
                   ? 'Tente ajustar os filtros para encontrar mais alunos.'
-                  : isCoordinator 
+                  : isCoordinator
                     ? 'Nenhum aluno cadastrado no sistema. Adicione alunos primeiro.'
                     : 'Nenhum aluno atribuído a você. Solicite atribuições ao coordenador.'}
               </p>
@@ -640,17 +646,16 @@ export default function AssignmentInterface({
               {filteredStudents.map(student => {
                 const isSelectable = isCoordinator || student.isAssignedToMe;
                 const engagementScore = student.engagementScore || 0;
-                const engagementColor = engagementScore >= 70 ? 'emerald' : 
-                                      engagementScore >= 40 ? 'amber' : 'rose';
-                
+                const engagementColor = engagementScore >= 70 ? 'emerald' :
+                  engagementScore >= 40 ? 'amber' : 'rose';
+
                 return (
-                  <div 
-                    key={student.id} 
-                    className={`group relative bg-gradient-to-br from-white to-gray-50 border rounded-2xl p-4 transition-all duration-300 hover:shadow-lg ${
-                      selectedStudents.includes(student.id)
-                        ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
-                        : 'border-gray-200'
-                    } ${!isSelectable ? 'opacity-70' : 'hover:border-indigo-200'}`}
+                  <div
+                    key={student.id}
+                    className={`group relative bg-gradient-to-br from-white to-gray-50 border rounded-2xl p-4 transition-all duration-300 hover:shadow-lg ${selectedStudents.includes(student.id)
+                      ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
+                      : 'border-gray-200'
+                      } ${!isSelectable ? 'opacity-70' : 'hover:border-indigo-200'}`}
                   >
                     {/* Checkbox */}
                     <div className="absolute top-4 right-4">
@@ -659,26 +664,23 @@ export default function AssignmentInterface({
                         checked={selectedStudents.includes(student.id)}
                         onChange={() => handleStudentSelect(student.id)}
                         disabled={!student.canReceiveSchedule || !isSelectable}
-                        className={`h-5 w-5 rounded border-gray-300 focus:ring-2 focus:ring-indigo-500 ${
-                          selectedStudents.includes(student.id)
-                            ? 'text-indigo-600 border-indigo-600'
-                            : ''
-                        } ${!isSelectable ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                        className={`h-5 w-5 rounded border-gray-300 focus:ring-2 focus:ring-indigo-500 ${selectedStudents.includes(student.id)
+                          ? 'text-indigo-600 border-indigo-600'
+                          : ''
+                          } ${!isSelectable ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                       />
                     </div>
 
                     {/* Avatar e Informações Básicas */}
                     <div className="flex items-start gap-4 mb-0">
-                      <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center ${
-                        student.isAssignedToMe 
-                          ? 'bg-gradient-to-br from-indigo-100 to-blue-100' 
-                          : 'bg-gray-100'
-                      }`}>
-                        <FaUser className={`w-7 h-7 ${
-                          student.isAssignedToMe ? 'text-indigo-600' : 'text-gray-600'
-                        }`} />
+                      <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center ${student.isAssignedToMe
+                        ? 'bg-gradient-to-br from-indigo-100 to-blue-100'
+                        : 'bg-gray-100'
+                        }`}>
+                        <FaUser className={`w-7 h-7 ${student.isAssignedToMe ? 'text-indigo-600' : 'text-gray-600'
+                          }`} />
                       </div>
-                      
+
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-bold text-gray-900 truncate">
@@ -691,11 +693,11 @@ export default function AssignmentInterface({
                             </span>
                           )}
                         </div>
-                        
+
                         <p className="text-sm text-gray-600 truncate mb-2">
                           {student.email}
                         </p>
-                        
+
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                           <span className="flex items-center gap-1">
                             <FaSchool className="w-3 h-3" />
@@ -746,7 +748,7 @@ export default function AssignmentInterface({
             Configurações de Atribuição
           </h3>
         </div>
-        
+
         <div className="p-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Data de Início */}
@@ -780,9 +782,8 @@ export default function AssignmentInterface({
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-medium text-indigo-800">Status</div>
-                    <div className={`text-sm font-medium ${
-                      selectedStudents.length === 0 ? 'text-amber-600' : 'text-emerald-600'
-                    }`}>
+                    <div className={`text-sm font-medium ${selectedStudents.length === 0 ? 'text-amber-600' : 'text-emerald-600'
+                      }`}>
                       {selectedStudents.length === 0 ? 'Nenhum selecionado' : 'Pronto para atribuir'}
                     </div>
                   </div>
@@ -798,47 +799,46 @@ export default function AssignmentInterface({
         const student = filteredStudents.find(s => s.id === studentId);
         return student && !student.isAssignedToMe;
       }) && (
-        <div className="animate-in fade-in slide-in-from-bottom-4">
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                  <FaExclamationTriangle className="w-6 h-6 text-amber-600" />
+          <div className="animate-in fade-in slide-in-from-bottom-4">
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                    <FaExclamationTriangle className="w-6 h-6 text-amber-600" />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <h4 className="font-semibold text-amber-800 text-lg mb-1">
-                  Permissões Insuficientes
-                </h4>
-                <p className="text-amber-700 mb-3">
-                  Você selecionou alunos que não estão sob sua responsabilidade. 
-                  Apenas coordenadores podem atribuir cronogramas para alunos não atribuídos.
-                </p>
-                <button
-                  onClick={() => {
-                    const validStudents = selectedStudents.filter(studentId => {
-                      const student = filteredStudents.find(s => s.id === studentId);
-                      return student && student.isAssignedToMe;
-                    });
-                    setSelectedStudents(validStudents);
-                  }}
-                  className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors text-sm font-medium"
-                >
-                  Remover alunos não atribuídos
-                </button>
+                <div>
+                  <h4 className="font-semibold text-amber-800 text-lg mb-1">
+                    Permissões Insuficientes
+                  </h4>
+                  <p className="text-amber-700 mb-3">
+                    Você selecionou alunos que não estão sob sua responsabilidade.
+                    Apenas coordenadores podem atribuir cronogramas para alunos não atribuídos.
+                  </p>
+                  <button
+                    onClick={() => {
+                      const validStudents = selectedStudents.filter(studentId => {
+                        const student = filteredStudents.find(s => s.id === studentId);
+                        return student && student.isAssignedToMe;
+                      });
+                      setSelectedStudents(validStudents);
+                    }}
+                    className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors text-sm font-medium"
+                  >
+                    Remover alunos não atribuídos
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Resultado da Atribuição */}
       {result && (
-        <div className={`animate-in fade-in slide-in-from-bottom-4 rounded-2xl p-8 ${
-          result.failed.length === 0
-            ? 'bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200'
-            : 'bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200'
-        }`}>
+        <div className={`animate-in fade-in slide-in-from-bottom-4 rounded-2xl p-8 ${result.failed.length === 0
+          ? 'bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200'
+          : 'bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200'
+          }`}>
           <div className="flex items-start gap-4 mb-6">
             {result.failed.length === 0 ? (
               <div className="flex-shrink-0">
@@ -970,19 +970,17 @@ export default function AssignmentInterface({
                 {activities.length} atividades cada
               </div>
             </div>
-            
+
             <button
               onClick={handleSubmit}
               disabled={assigning || selectedStudents.length === 0}
-              className={`px-8 py-4 rounded-xl font-bold transition-all flex items-center gap-3 ${
-                assigning 
-                  ? 'opacity-70 cursor-not-allowed' 
-                  : 'hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]'
-              } ${
-                isCoordinator
+              className={`px-8 py-4 rounded-xl font-bold transition-all flex items-center gap-3 ${assigning
+                ? 'opacity-70 cursor-not-allowed'
+                : 'hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]'
+                } ${isCoordinator
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
                   : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white'
-              }`}
+                }`}
             >
               {assigning ? (
                 <>

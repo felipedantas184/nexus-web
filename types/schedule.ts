@@ -75,14 +75,13 @@ export interface ScheduleTemplate extends BaseModel {
 
   // Configurações de tempo
   startDate: Date;
-  endDate?: Date;
+  endDate: Date;
   activeDays: number[]; // 0-6 (Domingo-Sábado)
 
   // Regras de repetição
   repeatRules: {
     type: 'weekly';
     resetOnRepeat: boolean;
-    maxRepetitions?: number;
   };
 
   // Metadados
@@ -281,11 +280,10 @@ export interface CreateScheduleDTO {
   description?: string;
   category: ScheduleCategory;
   startDate: Date;
-  endDate?: Date;
+  endDate: Date;
   activeDays: number[];
   repeatRules: {
     resetOnRepeat: boolean;
-    maxRepetitions?: number;
   };
   activities: CreateActivityDTO[];
 }

@@ -3,12 +3,12 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ActivityProgress, ProgressStatus } from '@/types/schedule';
+import { ActivityProgress, ActivityType, ProgressStatus } from '@/types/schedule';
 import ActivityExecutor from '@/components/activities/ActivityExecutor';
-import { 
-  FaCalendarDay, 
-  FaCheckCircle, 
-  FaClock, 
+import {
+  FaCalendarDay,
+  FaCheckCircle,
+  FaClock,
   FaFilter,
   FaSort,
   FaExclamationTriangle,
@@ -26,7 +26,8 @@ import {
   FaHourglassHalf,
   FaLightbulb,
   FaBullseye,
-  FaStopwatch
+  FaStopwatch,
+  FaStar
 } from 'react-icons/fa';
 import { FiZap, FiClock } from 'react-icons/fi';
 import { FaListCheck } from 'react-icons/fa6';
@@ -216,7 +217,7 @@ export default function TodayActivities({
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl border border-blue-200 p-4 hover:shadow-sm transition-shadow">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center">
@@ -228,7 +229,7 @@ export default function TodayActivities({
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gradient-to-br from-emerald-50 to-white rounded-xl border border-emerald-200 p-4 hover:shadow-sm transition-shadow">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center">
@@ -240,7 +241,7 @@ export default function TodayActivities({
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gradient-to-br from-purple-50 to-white rounded-xl border border-purple-200 p-4 hover:shadow-sm transition-shadow">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center">
@@ -272,11 +273,10 @@ export default function TodayActivities({
                 <button
                   key={value}
                   onClick={() => setFilter(value as any)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                    filter === value
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${filter === value
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                 >
                   {icon}
                   <span>{label}</span>
@@ -284,7 +284,7 @@ export default function TodayActivities({
               ))}
             </div>
           </div>
-          
+
           {/* Ordenação */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -311,7 +311,7 @@ export default function TodayActivities({
         </div>
       </div>
 
-      {/* Lista de Atividades - Design moderno */}
+      {/* Lista de Atividades - Design mais limpo (estilo antigo) */}
       <div className="space-y-4">
         {sortedActivities.length === 0 ? (
           <div className="text-center py-12 bg-gradient-to-br from-white to-gray-50 rounded-2xl border border-gray-200 shadow-sm">
@@ -322,8 +322,8 @@ export default function TodayActivities({
               {filter === 'all' ? 'Nenhuma atividade para hoje' : 'Nenhuma atividade encontrada'}
             </h3>
             <p className="text-gray-600 max-w-md mx-auto mb-6">
-              {filter === 'all' 
-                ? 'Excelente! Você completou todas as atividades programadas para hoje.' 
+              {filter === 'all'
+                ? 'Excelente! Você completou todas as atividades programadas para hoje.'
                 : 'Tente ajustar os filtros para encontrar outras atividades.'}
             </p>
             <div className="inline-flex items-center gap-2 text-sm text-purple-600 font-medium">
@@ -332,162 +332,225 @@ export default function TodayActivities({
             </div>
           </div>
         ) : (
-          sortedActivities.map(activity => {
-            const statusConfig = getStatusConfig(activity.status);
-            const isExpanded = expandedActivity === activity.id;
-            
-            return (
-              <div key={activity.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
-                {/* Cabeçalho da atividade (resumo) */}
-                <div 
-                  className={`p-5 cursor-pointer transition-all duration-200 ${
-                    isExpanded ? 'bg-gradient-to-r from-gray-50 to-white' : 'hover:bg-gray-50'
-                  }`}
-                  onClick={(e) => handleActivityClick(activity, e)}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    {/* Informações principais */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-4">
-                        {/* Ícone da atividade */}
-                        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${getActivityIconColor(activity.activitySnapshot.type)}`}>
-                          {getActivityIcon(activity.activitySnapshot.type)}
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <h3 className="font-bold text-gray-900 text-lg truncate">
-                              {activity.activitySnapshot.title}
-                            </h3>
-                            
-                            {/* Badge de obrigatório */}
-                            {activity.activitySnapshot.scoring.isRequired && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-50 text-red-700 text-xs font-medium rounded-full border border-red-100">
-                                <FaBullseye className="w-3 h-3" />
-                                Obrigatória
-                              </span>
-                            )}
-                            
-                            {/* Badge de dificuldade */}
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border ${getDifficultyColor(activity.activitySnapshot.metadata.difficulty)}`}>
-                              {activity.activitySnapshot.metadata.difficulty === 'easy' ? 'Fácil' :
-                               activity.activitySnapshot.metadata.difficulty === 'medium' ? 'Médio' : 'Difícil'}
-                            </span>
-                          </div>
-                          
-                          {/* Metadados */}
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
-                            <div className="flex items-center gap-1">
-                              <FiClock className="w-4 h-4" />
-                              <span>{activity.activitySnapshot.metadata.estimatedDuration} min</span>
-                            </div>
-                            
-                            <div className="flex items-center gap-1">
-                              <span className="capitalize">{activity.activitySnapshot.type}</span>
-                            </div>
-                            
-                            {activity.activitySnapshot.scoring.pointsOnCompletion > 0 && (
-                              <div className="flex items-center gap-1">
-                                <FaCheckCircle className="w-4 h-4 text-emerald-500" />
-                                <span>{activity.activitySnapshot.scoring.pointsOnCompletion} pontos</span>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Descrição (se disponível) */}
-                          {activity.activitySnapshot.description && (
-                            <p className="mt-2 text-gray-600 line-clamp-2 text-sm">
-                              {activity.activitySnapshot.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Status e ações */}
-                    <div className="flex flex-col sm:items-end gap-3">
-                      {/* Status badge */}
-                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${statusConfig.color}`}>
-                        {statusConfig.icon}
-                        <span>{statusConfig.label}</span>
-                      </div>
-                      
-                      {/* Ações */}
-                      <div className="flex items-center gap-2">
-                        {/* Botão de abrir em página */}
-                        {(activity.status === 'in_progress' || activity.status === 'completed') && (
-                          <button
-                            onClick={(e) => handleOpenInPage(activity.id, e)}
-                            className="flex items-center gap-2 px-3 py-2 text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Abrir em página separada"
-                          >
-                            <FaExternalLinkAlt className="w-3 h-3" />
-                            <span className="hidden sm:inline">Abrir</span>
-                          </button>
-                        )}
-                        
-                        {/* Botão de expandir */}
-                        <button 
-                          className="expand-button flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedActivity(isExpanded ? null : activity.id);
-                          }}
-                        >
-                          {isExpanded ? (
-                            <>
-                              <span className="hidden sm:inline">Recolher</span>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                              </svg>
-                            </>
-                          ) : (
-                            <>
-                              <span className="hidden sm:inline">Expandir</span>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Botão de iniciar (visível apenas para atividades pendentes) */}
-                  {activity.status === 'pending' && (
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleActivityClick(activity, e);
-                        }}
-                        disabled={processingActivity === activity.id}
-                        className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                      >
-                        <FaPlay className="w-4 h-4" />
-                        <span>{processingActivity === activity.id ? 'Abrindo...' : 'Iniciar Atividade'}</span>
-                        <FaArrowRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+            {sortedActivities.map(activity => {
+              // Mapeamento de cores por tipo de atividade (mantendo consistência visual)
+              const activityTypeStyles: Record<ActivityType, {
+                bg: string;
+                text: string;
+                icon: React.ReactNode;
+              }> = {
+                quick: {
+                  bg: 'bg-amber-100',
+                  text: 'text-amber-600',
+                  icon: <FiZap className="w-4 h-4" />
+                },
+                text: {
+                  bg: 'bg-blue-100',
+                  text: 'text-blue-600',
+                  icon: <FaBookOpen className="w-4 h-4" />
+                },
+                quiz: {
+                  bg: 'bg-purple-100',
+                  text: 'text-purple-600',
+                  icon: <FaQuestionCircle className="w-4 h-4" />
+                },
+                video: {
+                  bg: 'bg-red-100',
+                  text: 'text-red-600',
+                  icon: <FaVideo className="w-4 h-4" />
+                },
+                checklist: {
+                  bg: 'bg-emerald-100',
+                  text: 'text-emerald-600',
+                  icon: <FaListCheck className="w-4 h-4" />
+                },
+                file: {
+                  bg: 'bg-gray-100',
+                  text: 'text-gray-600',
+                  icon: <FaFileAlt className="w-4 h-4" />
+                }
+              };
 
-                {/* Conteúdo expandido */}
-                {isExpanded && (
-                  <div className="border-t border-gray-200">
-                    <div className="p-5">
+              const typeStyle = activityTypeStyles[activity.activitySnapshot.type] ?? activityTypeStyles.text;
+              const statusConfig = getStatusConfig(activity.status);
+              const isCompleted = activity.status === 'completed';
+              const isInProgress = activity.status === 'in_progress';
+              const isPending = activity.status === 'pending';
+
+              return (
+                <div
+                  key={activity.id}
+                  className={`
+              rounded-xl border p-4 flex flex-col gap-4 transition-all duration-200
+              shadow-sm hover:shadow-md hover:-translate-y-0.5
+              ${isCompleted ? 'bg-emerald-50 border-emerald-200' :
+                      isInProgress ? 'bg-blue-50 border-blue-200' :
+                        'bg-white border-gray-200'}
+              ${isPending ? 'hover:border-purple-300' : ''}
+            `}
+                >
+                  {/* HEADER */}
+                  <div className="flex justify-between items-start">
+                    <div className="flex gap-3">
+                      {/* ICON */}
+                      <div
+                        className={`
+                    w-9 h-9 rounded-lg flex items-center justify-center text-sm shrink-0
+                    ${isCompleted ? 'bg-emerald-100 text-emerald-600' : `${typeStyle.bg} ${typeStyle.text}`}
+                  `}
+                      >
+                        {typeStyle.icon}
+                      </div>
+
+                      {/* INFO */}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900 line-clamp-1">
+                            {activity.activitySnapshot.title}
+                          </span>
+
+                          {activity.activitySnapshot.scoring.isRequired && (
+                            <span
+                              title="Atividade obrigatória"
+                              className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"
+                            />
+                          )}
+                        </div>
+
+                        {/* STATUS BADGE */}
+                        <span
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-md w-fit ${isCompleted ? 'bg-emerald-100 text-emerald-700' :
+                            isInProgress ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}
+                        >
+                          {statusConfig.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* TOGGLE/ACTION BUTTON */}
+                    <button
+                      onClick={() => setExpandedActivity(expandedActivity === activity.id ? null : activity.id)}
+                      className={`
+                  w-8 h-8 rounded-lg flex items-center justify-center
+                  ${isCompleted ? 'text-emerald-600 hover:bg-emerald-100' :
+                          isInProgress ? 'text-blue-600 hover:bg-blue-100' :
+                            'text-gray-600 hover:bg-gray-100'}
+                  transition-colors
+                `}
+                      title={expandedActivity === activity.id ? "Recolher detalhes" : "Expandir detalhes"}
+                    >
+                      {expandedActivity === activity.id ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* METADATA */}
+                  <div className="flex gap-3 text-gray-500 text-xs">
+                    <div className="flex items-center gap-1">
+                      <FaClock className="w-3 h-3" />
+                      {activity.activitySnapshot.metadata.estimatedDuration}min
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <FaStar className="w-3 h-3" />
+                      {activity.activitySnapshot.scoring.pointsOnCompletion}pts
+                    </div>
+
+                    {activity.activitySnapshot.metadata.difficulty && (
+                      <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${activity.activitySnapshot.metadata.difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' :
+                        activity.activitySnapshot.metadata.difficulty === 'medium' ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                        {activity.activitySnapshot.metadata.difficulty === 'easy' ? 'Fácil' :
+                          activity.activitySnapshot.metadata.difficulty === 'medium' ? 'Médio' : 'Difícil'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* DESCRIPTION (if available and not too long) */}
+                  {activity.activitySnapshot.description && activity.activitySnapshot.description.length < 100 && (
+                    <p className="text-xs text-gray-600 line-clamp-2">
+                      {activity.activitySnapshot.description}
+                    </p>
+                  )}
+
+                  {/* FOOTER */}
+                  <div className="border-t pt-3 flex flex-col gap-3">
+                    <div className="flex gap-2">
+                      {/* MAIN ACTION BUTTON */}
+                      {isPending ? (
+                        <button
+                          onClick={(e) => handleActivityClick(activity, e)} // Passe o 'e' real aqui
+                          disabled={processingActivity === activity.id}
+                          className={`
+        flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
+        text-white font-semibold text-xs
+        px-3 py-2 rounded-lg
+        flex items-center justify-center gap-1.5
+        transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+      `}
+                        >
+                          <FaPlay className="w-3 h-3" />
+                          {processingActivity === activity.id ? 'Abrindo...' : 'Iniciar'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => handleOpenInPage(activity.id, e)} // Passe o 'e' real aqui também
+                          className="
+                            flex-1 bg-indigo-500 hover:bg-indigo-600
+                            text-white font-semibold text-xs
+                            px-3 py-2 rounded-lg
+                            flex items-center justify-center gap-1.5
+                            transition-colors duration-200
+                          "
+                        >
+                          <FaExternalLinkAlt className="w-3 h-3" />
+                          Abrir
+                        </button>
+                      )}
+                    </div>
+
+                    {/* COMPLETION STATUS */}
+                    {isCompleted && (
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
+                        <FaCheck className="w-3 h-3" />
+                        Concluída • {activity.scoring.pointsEarned} pontos
+                      </div>
+                    )}
+
+                    {/* IN PROGRESS STATUS */}
+                    {isInProgress && activity.startedAt && (
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600">
+                        <FaHourglassHalf className="w-3 h-3" />
+                        Em andamento
+                      </div>
+                    )}
+                  </div>
+
+                  {/* EXPANDED DETAILS (ActivityExecutor) */}
+                  {expandedActivity === activity.id && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
                       <ActivityExecutor
                         progress={activity}
                         onStatusChange={handleActivityStatusChange}
                         onCompletion={handleActivityStatusChange}
                       />
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -521,7 +584,7 @@ export default function TodayActivities({
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-indigo-900 mb-4">Resumo de Produtividade</h3>
-              
+
               {/* Barra de progresso */}
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-2">
@@ -531,15 +594,15 @@ export default function TodayActivities({
                   </span>
                 </div>
                 <div className="h-3 bg-white rounded-full overflow-hidden shadow-inner">
-                  <div 
+                  <div
                     className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-700"
-                    style={{ 
-                      width: `${stats.total > 0 ? (stats.completed / stats.total) * 100 : 0}%` 
+                    style={{
+                      width: `${stats.total > 0 ? (stats.completed / stats.total) * 100 : 0}%`
                     }}
                   />
                 </div>
               </div>
-              
+
               {/* Estatísticas detalhadas */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
@@ -555,18 +618,17 @@ export default function TodayActivities({
                   <div className="text-xs text-indigo-600">Concluídas</div>
                 </div>
               </div>
-              
+
               {/* Meta diária */}
               {stats.total > 0 && (
                 <div className="mt-4 pt-4 border-t border-indigo-200">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-indigo-700">Meta diária</span>
-                    <span className={`font-medium ${
-                      (stats.completed / stats.total) >= 0.8 ? 'text-emerald-600' :
+                    <span className={`font-medium ${(stats.completed / stats.total) >= 0.8 ? 'text-emerald-600' :
                       (stats.completed / stats.total) >= 0.5 ? 'text-amber-600' : 'text-red-600'
-                    }`}>
+                      }`}>
                       {(stats.completed / stats.total) >= 0.8 ? 'Excelente! 🎉' :
-                       (stats.completed / stats.total) >= 0.5 ? 'Bom progresso! 👏' : 'Continue assim! 💪'}
+                        (stats.completed / stats.total) >= 0.5 ? 'Bom progresso! 👏' : 'Continue assim! 💪'}
                     </span>
                   </div>
                 </div>

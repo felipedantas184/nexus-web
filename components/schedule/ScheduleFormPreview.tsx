@@ -135,9 +135,6 @@ export default function ScheduleFormPreview({ scheduleData }: ScheduleFormPrevie
           <li>• {totalHours} horas estimadas de atividades</li>
           <li>• {scheduleData.activeDays.length} dias ativos na semana</li>
           <li>• Repetição: {scheduleData.repeatRules.resetOnRepeat ? 'Com reset semanal' : 'Contínua'}</li>
-          {scheduleData.repeatRules.maxRepetitions && (
-            <li>• Máximo de {scheduleData.repeatRules.maxRepetitions} repetições</li>
-          )}
         </ul>
       </div>
     </div>

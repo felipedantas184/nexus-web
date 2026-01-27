@@ -52,34 +52,6 @@ const activityTypes: Array<{
       description: 'Atividade simples sem detalhes'
     },
     {
-      type: 'text',
-      icon: <FaFileAlt />,
-      label: 'Texto',
-      color: 'bg-purple-500',
-      description: 'Resposta escrita'
-    },
-    {
-      type: 'quiz',
-      icon: <FaQuestionCircle />,
-      label: 'Quiz',
-      color: 'bg-amber-500',
-      description: 'Perguntas e respostas'
-    },
-    {
-      type: 'video',
-      icon: <FaVideo />,
-      label: 'Vídeo',
-      color: 'bg-red-500',
-      description: 'Assistir conteúdo em vídeo'
-    },
-    {
-      type: 'checklist',
-      icon: <FaList />,
-      label: 'Checklist',
-      color: 'bg-green-500',
-      description: 'Lista de itens para marcar'
-    },
-    {
       type: 'file',
       icon: <FaFile />,
       label: 'Arquivo',
@@ -129,12 +101,12 @@ export default function QuickActivityModal({
       bonusPoints: 0
     },
     metadata: {
-      estimatedDuration: 15,
+      estimatedDuration: 60,
       difficulty: 'medium',
       therapeuticFocus: [],
       educationalFocus: []
     },
-    estimatedDuration: 15,
+    estimatedDuration: 60,
     pointsOnCompletion: 10
   });
 
@@ -518,7 +490,7 @@ export default function QuickActivityModal({
                 />
               </div>
 
-              {/* Requisito Simples */}
+              {/* Requisito Simples 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">
                   Tipo
@@ -551,7 +523,7 @@ export default function QuickActivityModal({
                     Opcional
                   </button>
                 </div>
-              </div>
+              </div>*/}
             </div>
 
             {/* Seção 4: Configurações Específicas */}

@@ -105,7 +105,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
           <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-indigo-50" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-md">
@@ -132,8 +132,8 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
             </div>
 
             {/* Cards de Métricas - Design Moderno */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Card: Atividades Hoje */}
+            {/** <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"> */}
+              {/* Card: Atividades Hoje 
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
                 <div className="flex items-center justify-between mb-4">
                   <div className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100">
@@ -159,9 +159,9 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                     </div>
                   </div>
                 )}
-              </div>
+              </div>*/}
 
-              {/* Card: Cronogramas Ativos */}
+              {/* Card: Cronogramas Ativos 
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
                 <div className="flex items-center justify-between mb-4">
                   <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100">
@@ -179,9 +179,9 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                     <span className="text-emerald-600 font-medium">Em progresso</span>
                   </div>
                 )}
-              </div>
+              </div>*/}
 
-              {/* Card: Streak */}
+              {/* Card: Streak 
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
                 <div className="flex items-center justify-between mb-4">
                   <div className="p-3 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100">
@@ -203,9 +203,9 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                     ))}
                   </div>
                 </div>
-              </div>
+              </div>*/}
 
-              {/* Card: Pontuação */}
+              {/* Card: Pontuação 
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
                 <div className="flex items-center justify-between mb-4">
                   <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100">
@@ -221,8 +221,8 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                   <FaChartBar className="w-4 h-4 text-purple-500" />
                   <span className="text-gray-600">Nível <span className="font-medium text-gray-900">3</span></span>
                 </div>
-              </div>
-            </div>
+              </div>*/}
+            {/**</div> */}
           </div>
         </div>
       )}

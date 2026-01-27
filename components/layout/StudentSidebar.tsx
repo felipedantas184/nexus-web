@@ -65,14 +65,14 @@ export default function StudentSidebar({
 
   return (
     <nav 
-      className={`
-        bg-gradient-to-b from-purple-800 via-purple-700 to-purple-900 w-72 h-screen p-6
-        flex flex-col transition-all duration-300 ease-in-out
-        shadow-2xl border-r border-white/10 sticky top-0 left-0 z-50
-        overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-track-purple-900/50 scrollbar-thumb-white/20
-        ${open ? 'translate-x-0' : '-translate-x-full'} ${className}
-      `}
-    >
+  className={`
+    bg-gradient-to-b from-purple-800 via-purple-700 to-purple-900 w-72 h-screen p-6
+    flex flex-col transition-all duration-300 ease-in-out fixed left-0 top-0 z-40
+    shadow-2xl border-r border-white/10
+    overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-track-purple-900/50 scrollbar-thumb-white/20
+    ${open ? 'translate-x-0' : '-translate-x-full'} ${className}
+  `}
+>
       <div className="flex-1 flex flex-col">
         {/* User Header */}
         <div className="flex items-center gap-4 p-5 bg-white/12 rounded-2xl mb-6 border border-white/20 backdrop-blur-md">

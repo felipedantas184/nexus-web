@@ -69,13 +69,12 @@ export class ScheduleService {
         repeatRules: {
           type: 'weekly',
           resetOnRepeat: sanitizedData.repeatRules.resetOnRepeat,
-          maxRepetitions: sanitizedData.repeatRules.maxRepetitions
         },
         metadata: {
           version: 1,
           estimatedWeeklyHours: metrics.estimatedWeeklyHours,
           totalActivities: metrics.totalActivities,
-          tags: metrics.tags
+          tags: metrics.tags,
         },
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -235,12 +234,11 @@ export class ScheduleService {
         description: updates.description || currentTemplate.description,
         category: updates.category || currentTemplate.category,
         startDate: updates.startDate || currentTemplate.startDate,
-        endDate: updates.endDate,
+        endDate: updates.endDate || currentTemplate.endDate,
         activeDays: updates.activeDays || currentTemplate.activeDays,
         repeatRules: {
           resetOnRepeat: updates.repeatRules?.resetOnRepeat ??
             currentTemplate.repeatRules.resetOnRepeat,
-          maxRepetitions: updates.repeatRules?.maxRepetitions
         },
         activities: updates.activities ||
           (currentTemplate as any).activities?.map((activity: ScheduleActivity) => ({

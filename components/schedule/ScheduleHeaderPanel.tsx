@@ -195,30 +195,40 @@ export default function ScheduleHeaderPanel({
               />
             </div>
 
-            {/* Regras de Repetição */}
+            {/* Data de Término (OBRIGATÓRIA) */}
             <div>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Número máximo de repetições
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="52"
-                    value={formData.repeatRules.maxRepetitions || ''}
-                    onChange={(e) => updateField('repeatRules', {
-                      ...formData.repeatRules,
-                      maxRepetitions: e.target.value ? parseInt(e.target.value) : undefined
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 text-gray-900"
-                    placeholder="Ex: 4 (para 1 mês)"
-                  />
-                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                    <FaInfoCircle className="w-3 h-3" />
-                    Deixe em branco para repetição indefinida
-                  </div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="flex items-center gap-2">
+                  <FaCalendarAlt className="w-4 h-4 text-gray-400" />
+                  Data de Término *
                 </div>
+              </label>
+              <input
+                type="date"
+                value={formData.endDate ? formData.endDate.toISOString().split('T')[0] : ''}
+                onChange={(e) => {
+                  const [year, month, day] = e.target.value.split('-').map(Number);
+                  const localDate = new Date(year, month - 1, day);
+
+                  // Validação: data de término não pode ser anterior à data de início
+                  if (localDate < formData.startDate) {
+                    alert('Data de término não pode ser anterior à data de início');
+                    return;
+                  }
+
+                  updateField('endDate', localDate);
+                }}
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 text-gray-900
+      ${errors.endDate ? 'border-red-500' : 'border-gray-300'}`}
+                min={formData.startDate.toISOString().split('T')[0]}
+                required
+              />
+              {errors.endDate && (
+                <p className="mt-1 text-sm text-red-600">{errors.endDate}</p>
+              )}
+              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                <FaInfoCircle className="w-3 h-3" />
+                O cronograma será executado até esta data
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
+// lib/utils/validationUtils.ts
 import { ActivityType, CreateScheduleDTO } from "@/types/schedule";
 
-// lib/utils/validationUtils.ts
 export class ValidationUtils {
   static validateScheduleData(data: CreateScheduleDTO): {
     isValid: boolean;
@@ -8,18 +8,38 @@ export class ValidationUtils {
   } {
     const errors: string[] = [];
 
-    // Nome
     if (!data.name || data.name.trim().length < 3) {
       errors.push('Nome do cronograma deve ter pelo menos 3 caracteres');
     }
 
-    // Datas
-    if (data.startDate < new Date()) {
+    // Datas - CORREÇÃO: Comparação CORRETA
+    const normalizeDate = (date: Date | string) => {
+      const d = typeof date === 'string'
+        ? new Date(date + 'T00:00:00')
+        : new Date(date);
+
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const today = normalizeDate(new Date());
+    const startDate = normalizeDate(data.startDate);
+
+    // A data de hoje é permitida, só datas anteriores são bloqueadas
+    if (startDate < today) {
       errors.push('Data de início não pode ser no passado');
     }
 
-    if (data.endDate && data.endDate <= data.startDate) {
-      errors.push('Data de término deve ser após a data de início');
+    // Data de término
+    if (!data.endDate) {
+      errors.push('Data de término é obrigatória');
+    } else {
+      const endDate = normalizeDate(data.endDate);
+
+      // IMPORTANTE: Compare as datas zeradas
+      if (endDate <= startDate) {
+        errors.push('Data de término deve ser posterior à data de início');
+      }
     }
 
     // Dias ativos
@@ -49,6 +69,11 @@ export class ValidationUtils {
       if (activity.pointsOnCompletion < 0) {
         errors.push(`Atividade ${index + 1}: Pontuação não pode ser negativa`);
       }
+
+      // Validação extra: atividade em dia não ativo
+      if (!data.activeDays.includes(activity.dayOfWeek)) {
+        errors.push(`Atividade ${index + 1}: Dia ${activity.dayOfWeek} não está ativo no cronograma`);
+      }
     });
 
     return {
@@ -61,28 +86,28 @@ export class ValidationUtils {
     switch (type) {
       case 'quick':
         return typeof config.autoComplete === 'boolean';
-      
+
       case 'text':
-        return typeof config.minWords === 'number' && 
-               typeof config.maxWords === 'number';
-      
+        return typeof config.minWords === 'number' &&
+          typeof config.maxWords === 'number';
+
       case 'quiz':
-        return Array.isArray(config.questions) && 
-               config.questions.length > 0 &&
-               typeof config.passingScore === 'number';
-      
+        return Array.isArray(config.questions) &&
+          config.questions.length > 0 &&
+          typeof config.passingScore === 'number';
+
       case 'video':
-        return typeof config.url === 'string' && 
-               config.url.includes('http');
-      
+        return typeof config.url === 'string' &&
+          config.url.includes('http');
+
       case 'checklist':
-        return Array.isArray(config.items) && 
-               config.items.length > 0;
-      
+        return Array.isArray(config.items) &&
+          config.items.length > 0;
+
       case 'file':
-        return Array.isArray(config.allowedTypes) && 
-               typeof config.maxSizeMB === 'number';
-      
+        return Array.isArray(config.allowedTypes) &&
+          typeof config.maxSizeMB === 'number';
+
       default:
         return false;
     }
@@ -93,6 +118,10 @@ export class ValidationUtils {
       ...data,
       name: (data.name || '').trim(),
       description: (data.description || '').trim(),
+      // Garantir que endDate está presente (se não estiver, calcula 4 semanas)
+      endDate: data.endDate || new Date(
+        (data.startDate || new Date()).getTime() + (28 * 24 * 60 * 60 * 1000)
+      ),
       activeDays: Array.from(new Set(data.activeDays || [])).sort(),
       activities: (data.activities || []).map((activity: any) => ({
         ...activity,

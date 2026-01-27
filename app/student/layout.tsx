@@ -1,4 +1,4 @@
-// app/layout/student-layout.tsx
+// app\student\layout.tsx
 'use client';
 
 import React, { useState } from 'react';
@@ -18,12 +18,10 @@ export default function StudentLayout({
     <ProtectedRoute allowedRoles={['student']}>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50">
         {/* Sidebar */}
-        <div className="fixed left-0 top-0 z-40">
-          <StudentSidebar 
-            open={sidebarOpen} 
-            onNavigate={() => setSidebarOpen(false)}
-          />
-        </div>
+        <StudentSidebar
+          open={sidebarOpen}
+          onNavigate={() => setSidebarOpen(false)}
+        />
 
         {/* Main Content Area */}
         <div className={`
@@ -31,7 +29,7 @@ export default function StudentLayout({
           ${sidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}
         `}>
           {/* Navbar */}
-          <StudentNavbar 
+          <StudentNavbar
             toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             sidebarCollapsed={!sidebarOpen}
           />
@@ -46,7 +44,7 @@ export default function StudentLayout({
             {/* Footer */}
             <footer className="mt-8 text-center text-sm text-gray-500">
               <p>
-                Nexus Platform - Saúde Mental & Educação Integradas • 
+                Nexus Platform - Saúde Mental & Educação Integradas •
                 <span className="ml-2 text-purple-600 font-medium">Sua evolução importa</span>
               </p>
               <p className="mt-1 text-xs">
@@ -60,7 +58,7 @@ export default function StudentLayout({
             className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 to-purple-700 
                      text-white shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 
                      flex items-center justify-center z-30"
-            onClick={() => {/* Abrir chat de suporte */}}
+            onClick={() => {/* Abrir chat de suporte */ }}
             title="Precisa de ajuda?"
           >
             <FaQuestionCircle className="w-6 h-6" />
