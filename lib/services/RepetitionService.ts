@@ -236,11 +236,6 @@ export class RepetitionService {
     schedule: ScheduleTemplate
   ): boolean {
     // 1. Verificar se alcançou número máximo de repetições
-    if (schedule.repeatRules.maxRepetitions) {
-      if (instance.currentWeekNumber >= schedule.repeatRules.maxRepetitions) {
-        return false;
-      }
-    }
 
     // 2. Verificar se tem data de término
     if (schedule.endDate) {

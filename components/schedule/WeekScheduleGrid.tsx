@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { CreateScheduleDTO, CreateActivityDTO } from '@/types/schedule';
 import {
   FaPlus,
@@ -12,6 +12,7 @@ import {
   FaExclamationCircle,
   FaCheckCircle
 } from 'react-icons/fa';
+import QuickAddInput from './QuickAddInput';
 
 interface WeekScheduleGridProps {
   formData: CreateScheduleDTO;
@@ -81,9 +82,52 @@ export default function WeekScheduleGrid({
     };
   };
 
-  const dayLabels: Record<number, string> = {
-    0: 'Domingo', 1: 'Segunda', 2: 'Terça', 3: 'Quarta',
-    4: 'Quinta', 5: 'Sexta', 6: 'Sábado'
+  const [quickAddingDay, setQuickAddingDay] = useState<number | null>(null);
+
+  const handleAddQuickActivity = (title: string, day: number) => {
+    const defaultQuickActivity: CreateActivityDTO = {
+      dayOfWeek: day,
+      orderIndex: formData.activities.filter(a => a.dayOfWeek === day).length,
+      type: 'quick',
+      title: title,
+      description: title, // Usa o mesmo título como descrição
+      instructions: `Complete a atividade: ${title}`,
+      config: {
+        requiresConfirmation: true,
+        autoComplete: true
+      },
+      scoring: {
+        isRequired: true,
+        pointsOnCompletion: 5, // Pontos padrão para atividades rápidas
+        bonusPoints: 0
+      },
+      metadata: {
+        estimatedDuration: 60, //
+        difficulty: 'easy', // Fácil por padrão
+        therapeuticFocus: [],
+        educationalFocus: []
+      },
+      estimatedDuration: 60,
+      pointsOnCompletion: 10
+    };
+
+    // Encontra a posição correta para inserir
+    const activitiesForDay = formData.activities.filter(a => a.dayOfWeek === day);
+    const newIndex = activitiesForDay.length;
+
+    // Usa a função do hook para adicionar
+    const newActivities = [...formData.activities];
+    newActivities.splice(
+      formData.activities.findIndex(a => a.dayOfWeek === day && a.orderIndex === newIndex),
+      0,
+      defaultQuickActivity
+    );
+
+    // Atualiza o formData
+    updateField('activities', newActivities);
+
+    // Sai do modo de adição rápida
+    setQuickAddingDay(null);
   };
 
   return (
@@ -99,14 +143,14 @@ export default function WeekScheduleGrid({
             <div
               key={day.id}
               className={`bg-white rounded-xl shadow-sm border ${hasActivities
-                  ? 'border-gray-300 hover:border-indigo-300'
-                  : 'border-gray-200 hover:border-gray-300'
+                ? 'border-gray-300 hover:border-indigo-300'
+                : 'border-gray-200 hover:border-gray-300'
                 } transition-all duration-200`}
             >
               {/* Cabeçalho do Dia */}
               <div className={`p-5 rounded-t-xl ${hasActivities
-                  ? 'bg-gradient-to-r from-gray-50 to-white'
-                  : 'bg-gray-50'
+                ? 'bg-gradient-to-r from-gray-50 to-white'
+                : 'bg-gray-50'
                 }`}>
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -147,18 +191,28 @@ export default function WeekScheduleGrid({
                   </div>
                 </div>
 
-                {/* Botão Principal de Adicionar */}
-                <button
-                  type="button"
-                  onClick={() => onAddActivity(day.id)}
-                  className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-3 ${hasActivities
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-md'
-                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-gray-200 hover:to-gray-300 border border-gray-300'
-                    }`}
-                >
-                  <FaPlus className="w-4 h-4" />
-                  {hasActivities ? 'Adicionar Outra Atividade' : 'Adicionar Primeira Atividade'}
-                </button>
+                {/* ÁREA DE ADIÇÃO RÁPIDA - NOVO */}
+                <div className="mt-3">
+                  {quickAddingDay === day.id ? (
+                    <QuickAddInput
+                      day={day.id}
+                      dayLabel={day.full}
+                      onAddQuickActivity={handleAddQuickActivity}
+                      isAdding={true}
+                      onToggle={() => setQuickAddingDay(null)}
+                    />
+                  ) : (
+                    <div className="flex gap-2">
+                      <QuickAddInput
+                        day={day.id}
+                        dayLabel={day.full}
+                        onAddQuickActivity={handleAddQuickActivity}
+                        isAdding={false}
+                        onToggle={() => setQuickAddingDay(day.id)}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Lista de Atividades */}
@@ -178,63 +232,71 @@ export default function WeekScheduleGrid({
 
                           {/* Conteúdo da Atividade */}
                           <div className="flex-1 min-w-0">
+                            {/* CABEÇALHO COM TÍTULO E BOTÕES DISCRETOS */}
                             <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <h4 className="font-semibold text-gray-800 text-sm mb-1">
-                                  {activity.title}
-                                </h4>
-                                <div className="flex items-center gap-3">
-                                  <span className={`text-xs px-2 py-1 rounded-full ${getActivityColor(activity.type)}`}>
-                                    {activity.type === 'quick' && 'Rápida'}
-                                    {activity.type === 'text' && 'Texto'}
-                                    {activity.type === 'quiz' && 'Quiz'}
-                                    {activity.type === 'video' && 'Vídeo'}
-                                    {activity.type === 'checklist' && 'Checklist'}
-                                    {activity.type === 'file' && 'Arquivo'}
-                                  </span>
+                              <div className="flex-1">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-gray-800 text-sm mb-1">
+                                      {activity.title}
+                                    </h4>
+                                    <div className="flex items-center gap-3">
+                                      <span className={`text-xs px-2 py-1 rounded-full ${getActivityColor(activity.type)}`}>
+                                        {activity.type === 'quick' && 'Rápida'}
+                                        {activity.type === 'text' && 'Texto'}
+                                        {activity.type === 'quiz' && 'Quiz'}
+                                        {activity.type === 'video' && 'Vídeo'}
+                                        {activity.type === 'checklist' && 'Checklist'}
+                                        {activity.type === 'file' && 'Arquivo'}
+                                      </span>
 
-                                  {activity.scoring.isRequired && (
-                                    <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full flex items-center gap-1">
-                                      <FaExclamationCircle className="w-3 h-3" />
-                                      Obrigatória
-                                    </span>
-                                  )}
+                                      {activity.scoring.isRequired && (
+                                        <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full flex items-center gap-1">
+                                          <FaExclamationCircle className="w-3 h-3" />
+                                          Obrigatória
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* BOTÕES DISCRETOS - Sempre visíveis mas sutis */}
+                                  <div className="flex gap-1 ml-2">
+                                    {/* Botão Editar (Discreto) */}
+                                    <button
+                                      type="button"
+                                      onClick={() => onEditActivity(day.id, activity, index)}
+                                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Editar atividade"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                    </button>
+
+                                    {/* Botão Apagar (Discreto) */}
+                                    <button
+                                      type="button"
+                                      onClick={() => onRemoveActivity(day.id, index)}
+                                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Remover atividade"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
-
-                              {/* Ações */}
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  type="button"
-                                  onClick={() => onDuplicateActivity(day.id, activity)}
-                                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-                                  title="Duplicar"
-                                >
-                                  <FaCopy className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onEditActivity(day.id, activity, index)}
-                                  className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
-                                  title="Editar"
-                                >
-                                  <FaEdit className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onRemoveActivity(day.id, index)}
-                                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
-                                  title="Remover"
-                                >
-                                  <FaTrash className="w-3.5 h-3.5" />
-                                </button>
                               </div>
                             </div>
 
+                            {/* DESCRIÇÃO */}
                             <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                               {activity.description || activity.instructions}
                             </p>
 
+                            {/* METADADOS */}
                             <div className="flex items-center gap-4 text-xs text-gray-500">
                               <div className="flex items-center gap-1">
                                 <FaClock className="w-3 h-3" />
@@ -273,30 +335,21 @@ export default function WeekScheduleGrid({
                     <p className="text-gray-500 text-sm mb-4">
                       Clique no botão acima para começar
                     </p>
+                    {/* Botão Principal de Adicionar */}
                     <button
                       type="button"
                       onClick={() => onAddActivity(day.id)}
-                      className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                      className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-3 ${hasActivities
+                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-md'
+                        : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-gray-200 hover:to-gray-300 border border-gray-300'
+                        }`}
                     >
-                      + Criar primeira atividade
+                      <FaPlus className="w-4 h-4" />
+                      {hasActivities ? 'Adicionar Outra Atividade' : 'Adicionar Primeira Atividade'}
                     </button>
                   </div>
                 )}
               </div>
-
-              {/* Rodapé com Observações */}
-              {hasActivities && (
-                <div className="border-t border-gray-200 p-4">
-                  <textarea
-                    placeholder="Observações para este dia (opcional)..."
-                    className="w-full text-xs border border-gray-300 rounded-lg p-3 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-                    rows={2}
-                    onChange={(e) => {
-                      // Implementar lógica de observações por dia se necessário
-                    }}
-                  />
-                </div>
-              )}
             </div>
           );
         })}
