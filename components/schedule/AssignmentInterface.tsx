@@ -30,6 +30,7 @@ import {
   FaLayerGroup
 } from 'react-icons/fa';
 import { TbFilter } from 'react-icons/tb';
+import { useAuth } from '@/context/AuthContext';
 
 interface StudentWithStatus extends Student {
   hasActiveInstance?: boolean;
@@ -95,6 +96,7 @@ export default function AssignmentInterface({
   const [schools, setSchools] = useState<string[]>(['all']);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const isCoordinator = userRole === 'coordinator';
 
@@ -111,8 +113,7 @@ export default function AssignmentInterface({
     return students.map(student => {
       const isAssigned = isCoordinator
         ? true
-        : student.profile.assignedProfessionals?.includes('current-user-id') || false;
-
+        : student.profile.assignedProfessionals?.includes(user?.id || '') || false;
       const engagementScore = calculateEngagementScore(student);
 
       return {

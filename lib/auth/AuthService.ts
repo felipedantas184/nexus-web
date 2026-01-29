@@ -240,8 +240,8 @@ export class AuthService {
         institution: '', // ← VAZIO (será preenchido no perfil)
         department: '',
         assignedStudents: [],
-        canCreatePrograms: data.role === 'coordinator' || data.role === 'psychologist',
-        canManageStudents: data.role === 'coordinator',
+        canCreatePrograms: data.role === 'coordinator' || data.role === 'monitor',
+        canManageStudents: true,
         canApproveRegistrations: data.role === 'coordinator',
         verified: false
       }

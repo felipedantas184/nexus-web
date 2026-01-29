@@ -98,7 +98,7 @@ export default function WeekScheduleGrid({
       },
       scoring: {
         isRequired: true,
-        pointsOnCompletion: 5, // Pontos padrão para atividades rápidas
+        pointsOnCompletion: 10, // Pontos padrão para atividades rápidas
         bonusPoints: 0
       },
       metadata: {
