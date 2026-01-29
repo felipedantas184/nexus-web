@@ -45,8 +45,8 @@ export class DateUtils {
 
   static isSameDay(date1: Date, date2: Date): boolean {
     return date1.getDate() === date2.getDate() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getFullYear() === date2.getFullYear();
+      date1.getMonth() === date2.getMonth() &&
+      date1.getFullYear() === date2.getFullYear();
   }
 
   static getDaysBetween(start: Date, end: Date): number {
@@ -60,5 +60,72 @@ export class DateUtils {
     if (hour >= 12 && hour < 18) return 'afternoon';
     if (hour >= 18 && hour < 24) return 'evening';
     return 'night';
+  }
+
+  static isDateInWeek(date: Date, weekStartDate: Date): boolean {
+    const weekEndDate = new Date(weekStartDate);
+    weekEndDate.setDate(weekStartDate.getDate() + 6);
+    weekEndDate.setHours(23, 59, 59, 999);
+
+    return date >= weekStartDate && date <= weekEndDate;
+  }
+
+  /**
+   * Retorna o número da semana no ano (1-52)
+   */
+  static getWeekOfYear(date: Date = new Date()): number {
+    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+    const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
+    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+  }
+
+  /**
+   * Verifica se é segunda-feira
+   */
+  static isMonday(date: Date = new Date()): boolean {
+    return date.getDay() === 1; // 0 = Domingo, 1 = Segunda
+  }
+
+  /**
+   * Verifica se duas semanas são consecutivas
+   */
+  static areWeeksConsecutive(week1Start: Date, week2Start: Date): boolean {
+    const expectedWeek2Start = new Date(week1Start);
+    expectedWeek2Start.setDate(week1Start.getDate() + 7);
+
+    return week2Start.toDateString() === expectedWeek2Start.toDateString();
+  }
+
+  /**
+   * Formata data para exibição amigável
+   */
+  static formatDateForDisplay(date: Date): string {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    };
+    return date.toLocaleDateString('pt-BR', options);
+  }
+
+  /**
+   * Formata intervalo de datas da semana
+   */
+  static formatWeekRange(startDate: Date, endDate: Date): string {
+    const startStr = startDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+    const endStr = endDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+    return `${startStr} - ${endStr}`;
+  }
+
+  /**
+   * Retorna o nome do dia da semana em português
+   */
+  static getDayName(dayIndex: number): string {
+    const days = [
+      'Domingo', 'Segunda-feira', 'Terça-feira',
+      'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'
+    ];
+    return days[dayIndex] || 'Dia inválido';
   }
 }

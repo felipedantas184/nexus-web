@@ -227,6 +227,10 @@ export interface PerformanceSnapshot extends BaseModel {
   weekNumber: number;
   weekStartDate: Date;
   weekEndDate: Date;
+  totalActivities?: number;
+  completedActivities?: number;
+  skippedActivities?: number;
+
 
   // Métricas de engajamento
   engagement: {
@@ -307,8 +311,8 @@ export interface CreateActivityDTO {
     therapeuticFocus?: string[];
     educationalFocus?: string[];
   };
-  estimatedDuration: number; // ADICIONADO
-  pointsOnCompletion: number; // ADICIONADO
+  estimatedDuration: number; // ADICIONADO, COMENTADO - DEVE SER RETIRADO
+  pointsOnCompletion: number; // ADICIONADO, COMENTADO - DEVE SER RETIRADO
 }
 
 export interface AssignScheduleDTO {
@@ -421,4 +425,78 @@ export interface ComparativeReport {
 
   generatedAt: Date;
   studentCount: number;
+}
+
+export interface WeeklySnapshot extends BaseModel {
+  scheduleInstanceId: string;
+  studentId: string;
+  weekNumber: number;
+  weekStartDate: Date;
+  weekEndDate: Date;
+
+  // Métricas básicas
+  metrics: {
+    totalActivities: number;
+    completedActivities: number;
+    skippedActivities: number;
+    completionRate: number; // 0-100
+    totalPointsEarned: number;
+    averagePointsPerActivity: number;
+    totalTimeSpent: number; // minutos
+    averageTimePerActivity: number; // minutos
+    consistencyScore: number; // 0-100 (dias com atividades)
+    adherenceScore: number; // 0-100 (no dia correto)
+    streakAtEndOfWeek: number;
+  };
+
+  // Análise por dia
+  dailyBreakdown: Record<number, {
+    total: number;
+    completed: number;
+    skipped: number;
+    pointsEarned: number;
+    timeSpent: number;
+  }>;
+
+  // Análise por tipo
+  activityTypeBreakdown: Record<ActivityType, {
+    total: number;
+    completed: number;
+    averagePoints: number;
+    averageTime: number;
+  }>;
+
+  // Metadados
+  metadata: {
+    scheduleTemplateName: string;
+    scheduleTemplateId: string;
+    professionalId: string;
+    generatedBy: 'system' | 'manual';
+    dataSource: 'calculated' | 'cached';
+  };
+}
+
+// Tipo para resultado do reset
+export interface WeeklyResetResult {
+  instanceId: string;
+  oldWeekNumber: number;
+  newWeekNumber: number;
+  snapshotId?: string;
+  newActivitiesCount: number;
+  status: 'success' | 'skipped' | 'error';
+  error?: string;
+}
+
+// Interface para DTO de geração de snapshot
+export interface GenerateSnapshotDTO {
+  scheduleInstanceId: string;
+  weekNumber: number;
+  forceRegenerate?: boolean;
+}
+
+// Interface para DTO de reset semanal
+export interface ProcessWeeklyResetDTO {
+  batchSize?: number;
+  forceAll?: boolean;
+  dryRun?: boolean;
 }

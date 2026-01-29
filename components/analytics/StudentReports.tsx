@@ -120,6 +120,12 @@ export default function StudentReports({
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+  if (report) {
+    console.log("Estado 'report' atualizado:", report);
+  }
+}, [report]);
+
   // Função para carregar dados básicos do aluno
   const loadStudentBasicData = async (id: string): Promise<Student> => {
     try {
