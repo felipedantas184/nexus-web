@@ -191,6 +191,18 @@ export default function WeekScheduleGrid({
                   </div>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => onAddActivity(day.id)}
+                  className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-3 ${hasActivities
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-md'
+                    : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-gray-200 hover:to-gray-300 border border-gray-300'
+                    }`}
+                >
+                  <FaPlus className="w-4 h-4" />
+                  {hasActivities ? 'Adicionar Outra Atividade' : 'Adicionar Primeira Atividade'}
+                </button>
+
                 {/* ÁREA DE ADIÇÃO RÁPIDA - NOVO */}
                 <div className="mt-3">
                   {quickAddingDay === day.id ? (
@@ -309,10 +321,10 @@ export default function WeekScheduleGrid({
                               </div>
 
                               <div className={`text-xs px-2 py-1 rounded-full ${activity.metadata.difficulty === 'easy'
-                                  ? 'bg-green-100 text-green-800'
-                                  : activity.metadata.difficulty === 'medium'
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-red-100 text-red-800'
+                                ? 'bg-green-100 text-green-800'
+                                : activity.metadata.difficulty === 'medium'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
                                 }`}>
                                 {activity.metadata.difficulty === 'easy' && 'Fácil'}
                                 {activity.metadata.difficulty === 'medium' && 'Médio'}
@@ -335,18 +347,6 @@ export default function WeekScheduleGrid({
                     <p className="text-gray-500 text-sm mb-4">
                       Clique no botão acima para começar
                     </p>
-                    {/* Botão Principal de Adicionar */}
-                    <button
-                      type="button"
-                      onClick={() => onAddActivity(day.id)}
-                      className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-3 ${hasActivities
-                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-md'
-                        : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-gray-200 hover:to-gray-300 border border-gray-300'
-                        }`}
-                    >
-                      <FaPlus className="w-4 h-4" />
-                      {hasActivities ? 'Adicionar Outra Atividade' : 'Adicionar Primeira Atividade'}
-                    </button>
                   </div>
                 )}
               </div>

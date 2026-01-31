@@ -109,6 +109,7 @@ export default function AssignmentInterface({
     return Math.min(streakScore + pointsScore + levelScore, 100);
   };
 
+  // Na linha ~160 do componente, ajuste a função de normalização:
   const normalizeStudents = (students: Student[]): StudentWithStatus[] => {
     return students.map(student => {
       const isAssigned = isCoordinator
@@ -116,11 +117,16 @@ export default function AssignmentInterface({
         : student.profile.assignedProfessionals?.includes(user?.id || '') || false;
       const engagementScore = calculateEngagementScore(student);
 
+      // Coordenador pode selecionar TODOS
+      // Profissional só pode selecionar SE estiver atribuído a ele
+      const canBeSelected = isCoordinator || isAssigned;
+
       return {
         ...student,
         hasActiveInstance: false,
         canReceiveSchedule: true,
         isAssignedToMe: isAssigned,
+        canBeSelected, // ← NOVA PROPRIEDADE
         engagementScore,
         stats: {
           totalPoints: student.profile.totalPoints ?? 0,
@@ -208,8 +214,19 @@ export default function AssignmentInterface({
     const student = filteredStudents.find(s => s.id === studentId);
     if (!student) return;
 
+    // Verificação mais clara:
     if (!isCoordinator && !student.isAssignedToMe) {
       setError('Você só pode selecionar alunos que estão sob sua responsabilidade');
+
+      // Feedback visual (opcional)
+      const studentCard = document.getElementById(`student-${studentId}`);
+      if (studentCard) {
+        studentCard.classList.add('shake-animation');
+        setTimeout(() => {
+          studentCard.classList.remove('shake-animation');
+        }, 500);
+      }
+
       return;
     }
 
@@ -645,10 +662,12 @@ export default function AssignmentInterface({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredStudents.map(student => {
-                const isSelectable = isCoordinator || student.isAssignedToMe;
                 const engagementScore = student.engagementScore || 0;
                 const engagementColor = engagementScore >= 70 ? 'emerald' :
                   engagementScore >= 40 ? 'amber' : 'rose';
+
+                // VERIFICAÇÃO CRÍTICA: Se pode ser selecionado
+                const canBeSelected = isCoordinator || student.isAssignedToMe;
 
                 return (
                   <div
@@ -656,24 +675,30 @@ export default function AssignmentInterface({
                     className={`group relative bg-gradient-to-br from-white to-gray-50 border rounded-2xl p-4 transition-all duration-300 hover:shadow-lg ${selectedStudents.includes(student.id)
                       ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
                       : 'border-gray-200'
-                      } ${!isSelectable ? 'opacity-70' : 'hover:border-indigo-200'}`}
+                      } ${!canBeSelected ? 'opacity-70' : 'hover:border-indigo-200'}`}
                   >
-                    {/* Checkbox */}
-                    <div className="absolute top-4 right-4">
+                    {/* Checkbox - SEMPRE VISÍVEL */}
+                    <div className="absolute top-4 right-4 z-10"> {/* ← Adicionado z-10 */}
                       <input
                         type="checkbox"
                         checked={selectedStudents.includes(student.id)}
-                        onChange={() => handleStudentSelect(student.id)}
-                        disabled={!student.canReceiveSchedule || !isSelectable}
+                        onChange={() => {
+                          if (!canBeSelected) {
+                            setError('Você só pode selecionar alunos que estão sob sua responsabilidade');
+                            return;
+                          }
+                          handleStudentSelect(student.id);
+                        }}
+                        disabled={!student.canReceiveSchedule || !canBeSelected}
                         className={`h-5 w-5 rounded border-gray-300 focus:ring-2 focus:ring-indigo-500 ${selectedStudents.includes(student.id)
                           ? 'text-indigo-600 border-indigo-600'
                           : ''
-                          } ${!isSelectable ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                          } ${!canBeSelected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                       />
                     </div>
 
                     {/* Avatar e Informações Básicas */}
-                    <div className="flex items-start gap-4 mb-0">
+                    <div className="flex items-start gap-4 mb-4">
                       <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center ${student.isAssignedToMe
                         ? 'bg-gradient-to-br from-indigo-100 to-blue-100'
                         : 'bg-gray-100'
@@ -713,24 +738,32 @@ export default function AssignmentInterface({
                       </div>
                     </div>
 
-                    {/* Status e Ações */}
-                    <div className="space-y-3">
-                      {!student.isAssignedToMe && isCoordinator && (
-                        <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
-                          <span className="font-medium">Não atribuído a você</span>
-                          <p className="text-xs mt-0.5">Pode atribuir como coordenador</p>
+                    {/* Indicador de Status de Atribuição */}
+                    {!student.isAssignedToMe && (
+                      <div className="mt-3">
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">
+                          <FaUserTie className="w-3 h-3" />
+                          {isCoordinator ? 'Não atribuído a você' : 'Não está sob sua responsabilidade'}
+                          {isCoordinator && (
+                            <span className="ml-1 text-gray-500 text-xs">
+                              (pode atribuir como coordenador)
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </div>
-
-                    {/* Overlay de Não Selecionável */}
-                    {!isSelectable && (
-                      <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-2xl flex items-center justify-center">
-                        <div className="text-center p-4">
-                          <FaUserTie className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-sm font-medium text-gray-600">Não atribuído a você</p>
-                          <p className="text-xs text-gray-500">Apenas coordenadores podem atribuir</p>
-                        </div>
+                      </div>
+                    )}
+                    
+                    {/* MENSAGEM DE ALERTA (apenas para profissionais quando aluno não está atribuído) */}
+                    {!isCoordinator && !student.isAssignedToMe && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-800 flex items-start gap-2">
+                          <FaExclamationTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                          <span>
+                            Este aluno não está sob sua responsabilidade.
+                            <br />
+                            <span className="font-medium">Apenas coordenadores podem atribuir.</span>
+                          </span>
+                        </p>
                       </div>
                     )}
                   </div>
@@ -741,7 +774,7 @@ export default function AssignmentInterface({
         </div>
       </div>
 
-      {/* Configurações de Atribuição */}
+      {/* Configurações de Atribuição 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -752,7 +785,6 @@ export default function AssignmentInterface({
 
         <div className="p-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Data de Início */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 <FaCalendarPlus className="inline mr-2" />
@@ -772,9 +804,8 @@ export default function AssignmentInterface({
               </div>
             </div>
 
-            {/* Configurações Adicionais */}
+            Configurações Adicionais 
             <div className="space-y-6">
-              {/* Contador de Selecionados */}
               <div className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl">
                 <div className="flex items-center justify-between">
                   <div>
@@ -793,7 +824,7 @@ export default function AssignmentInterface({
             </div>
           </div>
         </div>
-      </div>
+      </div>*/}
 
       {/* Feedback e Mensagens */}
       {!isCoordinator && selectedStudents.some(studentId => {

@@ -126,6 +126,8 @@ export default function StudentReports({
   }
 }, [report]);
 
+console.log(report)
+
   // Função para carregar dados básicos do aluno
   const loadStudentBasicData = async (id: string): Promise<Student> => {
     try {

@@ -54,15 +54,6 @@ export default function RegisterPage({ searchParams }: RegisterPageProps) {
                 Faça login
               </Link>
             </div>
-            <div className="mt-4 text-sm">
-              <Link 
-                href={isStudent ? '/register?type=professional' : '/register?type=student'}
-                className={`flex items-center gap-2 font-semibold hover:opacity-80 transition-colors ${oppositeColor}`}
-              >
-                <FaUserGraduate className="w-3.5 h-3.5" />
-                {isStudent ? 'Sou profissional' : 'Sou aluno'}
-              </Link>
-            </div>
           </div>
         }
       >

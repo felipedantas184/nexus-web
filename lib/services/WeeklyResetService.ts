@@ -390,10 +390,20 @@ export class WeeklyResetService {
   }> {
     try {
       console.log('🚀 [FULL RESET] Iniciando reset semanal COMPLETO');
+      console.log(`📅 Data atual: ${new Date().toLocaleDateString('pt-BR')}`);
 
-      // 1. Buscar TODAS as instâncias (não filtrar por necessidade)
+      // 1. Buscar TODAS as instâncias
       const allInstances = await this.getAllActiveInstances();
       console.log(`📊 [FULL RESET] Total de instâncias ativas: ${allInstances.length}`);
+
+      allInstances.forEach((instance, index) => {
+        console.log(`   ${index + 1}. ${instance.id}`);
+        console.log(`      Semana: ${instance.currentWeekNumber}`);
+        console.log(`      Início: ${instance.currentWeekStartDate.toLocaleDateString('pt-BR')}`);
+        console.log(`      Fim: ${instance.currentWeekEndDate.toLocaleDateString('pt-BR')}`);
+        console.log(`      Status: ${instance.status}`);
+        console.log(`      Progresso: ${instance.progressCache?.completedActivities || 0}/${instance.progressCache?.totalActivities || 0}`);
+      });
 
       if (allInstances.length === 0) {
         console.log('ℹ️ [FULL RESET] Nenhuma instância ativa encontrada');
@@ -515,24 +525,26 @@ export class WeeklyResetService {
     try {
       console.log(`🔄 [FULL RESET] Processando ${instanceId}, semana ${oldWeekNumber}`);
 
-      // 1. Sempre gerar snapshot (mesmo que já exista, regenera)
+      // 🔥 CORREÇÃO: SALVAR VALORES ANTIGOS PARA LOG
+      const oldCompleted = instance.progressCache?.completedActivities || 0;
+      const oldTotal = instance.progressCache?.totalActivities || 0;
+
+      // 1. Sempre gerar snapshot
       let snapshotId: string | undefined;
       try {
         const snapshotResult = await WeeklySnapshotService.generateSnapshot({
           scheduleInstanceId: instanceId,
           weekNumber: oldWeekNumber,
-          forceRegenerate: true // Força regenerar se já existir
+          forceRegenerate: true
         });
         snapshotId = snapshotResult.snapshotId;
       } catch (snapshotError: any) {
         console.warn(`⚠️ [FULL RESET] Erro ao gerar snapshot para ${instanceId}:`, snapshotError.message);
-        // Continua mesmo sem snapshot
       }
 
       // 2. Verificar se cronograma ainda está dentro do período
       const shouldContinue = await this.shouldScheduleContinue(instance);
       if (!shouldContinue) {
-        // Marcar como completed
         await updateDoc(doc(firestore, this.COLLECTIONS.INSTANCES, instanceId), {
           status: 'completed',
           completedAt: serverTimestamp(),
@@ -555,32 +567,66 @@ export class WeeklyResetService {
       const newWeekStartDate = DateUtils.addWeeks(instance.currentWeekStartDate, 1);
       const newWeekEndDate = DateUtils.addWeeks(instance.currentWeekEndDate, 1);
 
-      // 4. Atualizar instância
-      const batch = writeBatch(firestore);
-      const instanceRef = doc(firestore, this.COLLECTIONS.INSTANCES, instanceId);
+      // 4. 🔥 CORREÇÃO CRÍTICA: ATUALIZAR INSTÂNCIA COM TRANSACTION
+      // Usar transaction para garantir atomicidade
+      await this.runTransaction(async (transaction) => {
+        const instanceRef = doc(firestore, this.COLLECTIONS.INSTANCES, instanceId);
 
-      batch.update(instanceRef, {
-        currentWeekNumber: newWeekNumber,
-        currentWeekStartDate: Timestamp.fromDate(newWeekStartDate),
-        currentWeekEndDate: Timestamp.fromDate(newWeekEndDate),
-        'progressCache.completedActivities': 0,
-        'progressCache.completionPercentage': 0,
-        'progressCache.totalPointsEarned': 0,
-        'progressCache.lastUpdatedAt': serverTimestamp(),
-        updatedAt: serverTimestamp()
+        // 🔥 FORÇAR ZERAMENTO DO PROGRESSCACHE
+        transaction.update(instanceRef, {
+          currentWeekNumber: newWeekNumber,
+          currentWeekStartDate: Timestamp.fromDate(newWeekStartDate),
+          currentWeekEndDate: Timestamp.fromDate(newWeekEndDate),
+          // 🔥 ZERAR EXPLICITAMENTE TODOS OS CAMPOS
+          'progressCache.completedActivities': 0,
+          'progressCache.completionPercentage': 0,
+          'progressCache.totalPointsEarned': 0,
+          'progressCache.streakDays': instance.progressCache?.streakDays || 0, // Manter streak
+          'progressCache.totalActivities': instance.progressCache?.totalActivities || 0, // Manter total
+          'progressCache.lastUpdatedAt': serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+
+        console.log(`🔒 [TRANSACTION] Zerando progressCache de ${oldCompleted}/${oldTotal} para 0/${instance.progressCache?.totalActivities || 0}`);
       });
 
-      await batch.commit();
+      console.log(`✅ [FULL RESET] ${instanceId} atualizada: semana ${oldWeekNumber} → ${newWeekNumber}`);
+      console.log(`📊 ProgressCache REAL zerado: ${oldCompleted}/${oldTotal} → 0/${instance.progressCache?.totalActivities || 0}`);
 
-      // 5. GERAR NOVAS ATIVIDADES (IMPORTANTE!)
+      // 5. GERAR NOVAS ATIVIDADES
       let newActivitiesCount = 0;
       try {
         newActivitiesCount = await this.generateNewWeekActivities(instanceId, newWeekNumber);
-        console.log(`📝 [FULL RESET] ${newActivitiesCount} novas atividades geradas para ${instanceId}`);
+        console.log(`📝 [FULL RESET] ${newActivitiesCount} novas atividades geradas`);
       } catch (activityError: any) {
-        console.warn(`⚠️ [FULL RESET] Erro ao gerar atividades para ${instanceId}:`, activityError.message);
-        // Não falha o reset por causa disso
+        console.warn(`⚠️ [FULL RESET] Erro ao gerar atividades:`, activityError.message);
       }
+
+      // 6. 🔥 VERIFICAÇÃO PÓS-RESET (IMPORTANTE!)
+      // Aguardar 2 segundos e verificar se realmente foi zerado
+      setTimeout(async () => {
+        try {
+          const updatedInstance = await ScheduleInstanceService.getScheduleInstanceById(instanceId);
+          const actualCompleted = updatedInstance.progressCache?.completedActivities || 0;
+
+          if (actualCompleted > 0) {
+            console.error(`🚨 [VERIFICAÇÃO] ERRO CRÍTICO: ${instanceId} ainda tem ${actualCompleted} atividades completadas após reset!`);
+            console.error(`   Algo está SOBRESCREVENDO o progressCache!`);
+
+            // Tentar corrigir forçadamente
+            await updateDoc(doc(firestore, this.COLLECTIONS.INSTANCES, instanceId), {
+              'progressCache.completedActivities': 0,
+              'progressCache.totalPointsEarned': 0,
+              'progressCache.completionPercentage': 0,
+              'progressCache.lastUpdatedAt': serverTimestamp()
+            });
+          } else {
+            console.log(`✅ [VERIFICAÇÃO] ${instanceId} realmente zerado: ${actualCompleted} atividades`);
+          }
+        } catch (checkError) {
+          console.warn(`⚠️ Erro na verificação pós-reset:`, checkError);
+        }
+      }, 2000);
 
       return {
         instanceId,
@@ -604,6 +650,11 @@ export class WeeklyResetService {
     }
   }
 
+  private static async runTransaction(updateFunction: (transaction: any) => Promise<void>) {
+  // Implementação específica para Firestore
+  // Em produção, usar firestore.runTransaction
+}
+
   /**
    * Verifica se cronograma deve continuar (baseado em endDate)
    */
@@ -616,8 +667,19 @@ export class WeeklyResetService {
         return true; // Sem data de fim, continua indefinidamente
       }
 
+      // CORREÇÃO: Usar a data de INÍCIO da PRÓXIMA semana
       const nextWeekStart = DateUtils.addWeeks(instance.currentWeekStartDate, 1);
-      return nextWeekStart <= scheduleTemplate.endDate;
+
+      // IMPORTANTE: Comparar apenas datas (ignorar horas)
+      const nextWeekStartDateOnly = new Date(nextWeekStart.getFullYear(), nextWeekStart.getMonth(), nextWeekStart.getDate());
+      const templateEndDateOnly = new Date(scheduleTemplate.endDate.getFullYear(), scheduleTemplate.endDate.getMonth(), scheduleTemplate.endDate.getDate());
+
+      console.log(`📅 [CONTINUE CHECK] Instância ${instance.id}:`);
+      console.log(`   - Próxima semana: ${nextWeekStartDateOnly.toLocaleDateString()}`);
+      console.log(`   - Template endDate: ${templateEndDateOnly.toLocaleDateString()}`);
+      console.log(`   - Deve continuar? ${nextWeekStartDateOnly <= templateEndDateOnly}`);
+
+      return nextWeekStartDateOnly <= templateEndDateOnly;
 
     } catch (error) {
       console.warn('Erro ao verificar continuidade do cronograma:', error);

@@ -139,7 +139,7 @@ export default function ProfessionalFields({
             <div
               key={role.value}
               className={`
-                border-2 rounded-xl p-4 cursor-pointer transition-all duration-200
+                border-2 rounded-xl p-3 cursor-pointer transition-all duration-200
                 ${selectedRole === role.value 
                   ? 'border-indigo-500 bg-indigo-50' 
                   : 'border-gray-300 bg-white hover:border-indigo-300'
@@ -155,9 +155,6 @@ export default function ProfessionalFields({
                 <div className="flex-1">
                   <div className={`font-semibold text-sm ${selectedRole === role.value ? 'text-indigo-600' : 'text-gray-800'}`}>
                     {role.title}
-                  </div>
-                  <div className="text-gray-500 text-xs mt-0.5">
-                    {role.description}
                   </div>
                 </div>
                 {selectedRole === role.value && (

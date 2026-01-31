@@ -529,6 +529,8 @@ export class ScheduleInstanceService {
    * Atualiza cache de progresso de uma instância
    */
   static async updateProgressCache(instanceId: string): Promise<void> {
+    console.log(`🔍 [UPDATE CACHE] Chamado para ${instanceId}`, new Date().toISOString());
+
     try {
       const progress = await this.getWeekProgress(instanceId, 1); // Semana atual
 
@@ -550,9 +552,10 @@ export class ScheduleInstanceService {
         'progressCache.lastUpdatedAt': serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+      console.log(`📊 [UPDATE CACHE] ${instanceId} atualizado: ${completed}/${total} atividades`);
 
     } catch (error) {
-      console.error('Erro ao atualizar cache de progresso:', error);
+      console.error(`❌ [UPDATE CACHE] Erro em ${instanceId}:`, error);
       // Não falhar a operação principal
     }
   }
