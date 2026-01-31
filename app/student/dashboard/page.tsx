@@ -1,7 +1,7 @@
-// app/student/dashboard/page.tsx
+// app/student/dashboard/page.tsx - VERSÃO ATUALIZADA COM VISUAL INSPIRADOR
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import StudentDashboard from '@/components/student/StudentDashboard';
 import { 
   FaBell, 
@@ -23,13 +23,7 @@ export default function StudentDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Conteúdo Principal */}
-
-       {/* Banner de notificações (opcional) 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-        <NotificationManager />
-      </div>*/}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-6">
       <main>
         <StudentDashboard showHeader={true} />
       </main>

@@ -1,41 +1,41 @@
-// components/student/StudentDashboard.tsx
+// components/student/StudentDashboard.tsx - VERSÃO RESPONSIVA
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import TodayActivities from './TodayActivities';
-import ProgressTracking from './ProgressTracking';
 import { useStudentSchedule } from '@/hooks/useStudentSchedule';
 import {
   FaCalendarDay,
-  FaChartLine,
   FaTrophy,
-  FaBell,
-  FaCalendarWeek,
-  FaUserGraduate,
-  FaLightbulb,
-  FaComments,
-  FaCheckCircle,
   FaFire,
-  FaChartBar,
+  FaChartLine,
+  FaCheckCircle,
+  FaCrown,
+  FaCalendar,
+  FaBook,
+  FaBell,
   FaArrowRight,
-  FaChevronRight,
-  FaStar
+  FaLightbulb,
+  FaClock
 } from 'react-icons/fa';
-import { FiTrendingUp, FiClock } from 'react-icons/fi';
+import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
 
 interface StudentDashboardProps {
   showHeader?: boolean;
 }
 
 export default function StudentDashboard({ showHeader = true }: StudentDashboardProps) {
+  const { user } = useAuth();
+  const student = user?.role === 'student' ? user : null;
+  
   const {
     todayActivities,
     instances,
     loading,
     error,
     refresh,
-    totalTodayActivities,
-    hasActiveSchedules
+    totalTodayActivities
   } = useStudentSchedule();
 
   const [todaysDate] = useState(new Date());
@@ -62,15 +62,26 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
   const pendingToday = todayActivities.filter(a => a.status === 'pending').length;
   const completionRate = totalTodayActivities > 0 ? Math.round((completedToday / totalTodayActivities) * 100) : 0;
 
+  const getMotivationalMessage = () => {
+    const messages = [
+      "Cada pequeno passo conta! 💪",
+      "Você está mais próximo do que imagina! ✨",
+      "A consistência é a chave do sucesso! 🔑",
+      "Hoje é um ótimo dia para aprender! 📚",
+      "Seu progresso é inspirador! 🌟"
+    ];
+    return messages[Math.floor(Math.random() * messages.length)];
+  };
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
         <div className="text-center">
-          <div className="relative">
+          <div className="relative inline-block mb-4">
             <div className="w-16 h-16 border-4 border-purple-200 rounded-full"></div>
             <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
           </div>
-          <p className="mt-4 text-gray-600 font-medium">Preparando seu dashboard...</p>
+          <p className="mt-4 text-slate-600 font-medium text-sm md:text-base">Preparando seu dashboard...</p>
         </div>
       </div>
     );
@@ -79,15 +90,15 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
   if (error) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
-        <div className="text-center max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <div className="text-center max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">⚠️</span>
           </div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Erro ao carregar</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <h2 className="text-lg md:text-xl font-semibold text-slate-800 mb-2">Erro ao carregar</h2>
+          <p className="text-slate-600 mb-6 text-sm md:text-base">{error}</p>
           <button
             onClick={refresh}
-            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200 font-medium"
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:shadow-lg transition-all duration-200 font-medium text-sm md:text-base"
           >
             Tentar novamente
           </button>
@@ -98,271 +109,281 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
 
   return (
     <div className="min-h-screen">
-      {/* Header Moderno */}
+      {/* Header com Boas-vindas - Design Inspirador */}
       {showHeader && (
-        <div className="relative overflow-hidden">
-          {/* Background com gradiente sutil */}
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-indigo-50" />
+        <div className="bg-gradient-to-r from-indigo-500 to-violet-500 rounded-xl md:rounded-2xl p-4 md:p-6 mb-4 md:mb-6 text-white shadow-xl shadow-indigo-200">
+          <div className="mb-6 md:mb-8">
+            <div className="mb-4">
+              <h1 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 flex items-center gap-2">
+                {getGreeting()}, {student?.name?.split(' ')[0] || 'Estudante'}!
+                <span className="text-yellow-300 animate-bounce hidden sm:inline-block">
+                  <FaCrown />
+                </span>
+              </h1>
+              <p className="text-indigo-100 text-sm md:text-base">{getMotivationalMessage()}</p>
+            </div>
+            
+            <div className="flex items-center gap-2 text-indigo-100 text-xs md:text-sm">
+              <FaCalendarDay className="w-3 h-3 md:w-4 md:h-4" />
+              <span className="font-medium">{formatDate(todaysDate)}</span>
+            </div>
+          </div>
 
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-md">
-                    <FaStar className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">{getGreeting()}!</h1>
-                    <p className="text-gray-600">Continue sua jornada de desenvolvimento</p>
-                  </div>
+          {/* Stats Overview - Design Inspirador */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg md:rounded-xl p-3 md:p-4 border border-white/30 shadow-lg">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 rounded-lg md:rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <FaTrophy className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
-                <div className="text-sm text-gray-500 mt-2">
-                  {formatDate(todaysDate)}
-                </div>
-              </div>
-
-              {/* Status Badge */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-3">
-                <div className="text-sm text-gray-500 mb-1">Status do dia</div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${completionRate > 70 ? 'bg-emerald-500' : completionRate > 30 ? 'bg-amber-500' : 'bg-red-500'}`} />
-                  <div className="text-lg font-bold text-gray-900">{completionRate}% concluído</div>
+                <div className="min-w-0">
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{student?.profile.totalPoints || 0}</div>
+                  <div className="text-xs md:text-sm text-white/90 truncate">Pontos Totais</div>
                 </div>
               </div>
             </div>
 
-            {/* Cards de Métricas - Design Moderno */}
-            {/** <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"> */}
-              {/* Card: Atividades Hoje 
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100">
-                    <FaCalendarDay className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <span className="text-xs font-medium px-2 py-1 bg-blue-50 text-blue-700 rounded-full">
-                    Hoje
-                  </span>
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg md:rounded-xl p-3 md:p-4 border border-white/30 shadow-lg">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 rounded-lg md:rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <FaFire className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">{totalTodayActivities}</div>
-                <div className="text-sm text-gray-600">Atividades programadas</div>
-                {totalTodayActivities > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Concluídas</span>
-                      <span className="font-medium text-gray-900">{completedToday}/{totalTodayActivities}</span>
-                    </div>
-                    <div className="mt-1 w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-500"
-                        style={{ width: `${completionRate}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>*/}
+                <div className="min-w-0">
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{student?.profile.streak || 0}</div>
+                  <div className="text-xs md:text-sm text-white/90 truncate">Dias Seguidos</div>
+                </div>
+              </div>
+            </div>
 
-              {/* Card: Cronogramas Ativos 
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100">
-                    <FaCalendarWeek className="w-6 h-6 text-indigo-600" />
-                  </div>
-                  <span className="text-xs font-medium px-2 py-1 bg-indigo-50 text-indigo-700 rounded-full">
-                    Ativos
-                  </span>
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg md:rounded-xl p-3 md:p-4 border border-white/30 shadow-lg">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 rounded-lg md:rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <FaChartLine className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">{instances.length}</div>
-                <div className="text-sm text-gray-600">Cronogramas em andamento</div>
-                {instances.length > 0 && (
-                  <div className="mt-3 flex items-center gap-2 text-sm">
-                    <FiTrendingUp className="w-4 h-4 text-emerald-500" />
-                    <span className="text-emerald-600 font-medium">Em progresso</span>
-                  </div>
-                )}
-              </div>*/}
+                <div className="min-w-0">
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">Nível {student?.profile.level || 1}</div>
+                  <div className="text-xs md:text-sm text-white/90 truncate">Seu Nível</div>
+                </div>
+              </div>
+            </div>
 
-              {/* Card: Streak 
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100">
-                    <FaFire className="w-6 h-6 text-amber-600" />
-                  </div>
-                  <span className="text-xs font-medium px-2 py-1 bg-amber-50 text-amber-700 rounded-full">
-                    Sequência
-                  </span>
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg md:rounded-xl p-3 md:p-4 border border-white/30 shadow-lg">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 rounded-lg md:rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <FaCheckCircle className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">7</div>
-                <div className="text-sm text-gray-600">Dias consecutivos</div>
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="flex -space-x-1">
-                    {[...Array(7)].map((_, i) => (
-                      <div
-                        key={i}
-                        className={`w-5 h-5 rounded-full ${i < 5 ? 'bg-emerald-400' : 'bg-gray-200'} border border-white`}
-                      />
-                    ))}
-                  </div>
+                <div className="min-w-0">
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{completionRate}%</div>
+                  <div className="text-xs md:text-sm text-white/90 truncate">Hoje</div>
                 </div>
-              </div>*/}
-
-              {/* Card: Pontuação 
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow duration-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100">
-                    <FaTrophy className="w-6 h-6 text-emerald-600" />
-                  </div>
-                  <span className="text-xs font-medium px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full">
-                    Conquistas
-                  </span>
-                </div>
-                <div className="text-3xl font-bold text-gray-900 mb-1">1,250</div>
-                <div className="text-sm text-gray-600">Pontos totais</div>
-                <div className="mt-3 flex items-center gap-2 text-sm">
-                  <FaChartBar className="w-4 h-4 text-purple-500" />
-                  <span className="text-gray-600">Nível <span className="font-medium text-gray-900">3</span></span>
-                </div>
-              </div>*/}
-            {/**</div> */}
-          </div>
+              </div>
+            </div>
+          </div> 
         </div>
       )}
 
-      {/* Conteúdo Principal */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Seção Ativa - Design Moderno */}
-        <div className="mb-8">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100">
-                    <FaCalendarDay className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">Atividades de Hoje</h2>
-                    <p className="text-gray-600 text-sm">
-                      {completedToday} de {totalTodayActivities} concluídas • {pendingToday} pendentes
-                    </p>
-                  </div>
-                </div>
+      {/* Conteúdo Principal - Grid responsivo */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+        {/* SEÇÃO PRINCIPAL - Atividades */}
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
+          <div className="bg-white rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 md:mb-6">
+              <h2 className="text-lg md:text-xl font-bold text-slate-800 flex items-center gap-2">
+                <FaCalendarDay className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="whitespace-nowrap">Suas Atividades de Hoje</span>
+              </h2>
+              <div className="flex items-center justify-between sm:justify-end gap-4">
+                <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-bold">
+                  {completedToday}/{totalTodayActivities}
+                </span>
                 {totalTodayActivities > 0 && (
-                  <button className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg font-medium text-sm transition-colors">
-                    Ver calendário completo
+                  <button className="sm:hidden px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium text-xs transition-colors">
+                    Ver todas
                   </button>
                 )}
               </div>
             </div>
-            <div className="p-1">
-              <TodayActivities
-                activities={todayActivities}
-                onActivityUpdate={refresh}
-              />
-            </div>
-          </div>
-        </div>
 
-          {/* Sidebar de Insights - Design Moderno */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Dica do Dia */}
-            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl border border-blue-100 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200">
-                  <FaLightbulb className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-blue-900">Dica do Dia</h3>
-                  <p className="text-sm text-blue-700">Para melhor produtividade</p>
-                </div>
-              </div>
-              <p className="text-blue-800 mb-4">
-                Estabeleça metas pequenas e comemoráveis. Cada pequena vitória libera dopamina, mantendo você motivado!
-              </p>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-blue-600 font-medium">Baseado em ciência comportamental</span>
-                <FaChevronRight className="w-4 h-4 text-blue-500" />
-              </div>
-            </div>
-
-            {/* Status de Desempenho */}
-            <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-2xl border border-emerald-100 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-200">
-                  <FaUserGraduate className="w-6 h-6 text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-emerald-900">Seu Desempenho</h3>
-                  <p className="text-sm text-emerald-700">Análise da semana</p>
+            {totalTodayActivities === 0 ? (
+              <div className="text-center py-8 md:py-12 border-2 border-dashed border-slate-200 rounded-xl">
+                <FaLightbulb className="w-10 h-10 md:w-12 md:h-12 text-slate-300 mx-auto mb-4" />
+                <h3 className="text-lg md:text-xl font-bold text-slate-700 mb-2">Dia de descanso! 🎉</h3>
+                <p className="text-slate-500 mb-6 px-2 md:px-0 text-sm md:text-base max-w-md mx-auto">
+                  Você não tem atividades programadas para hoje. Aproveite para revisar conteúdos ou explorar novos aprendizados!
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center px-2">
+                  <Link
+                    href="/student/programs"
+                    className="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 md:px-6 md:py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-sm md:text-base"
+                  >
+                    <FaBook className="w-3 h-3 md:w-4 md:h-4" />
+                    Explorar Programas
+                  </Link>
+                  <Link
+                    href="/student/schedules"
+                    className="inline-flex items-center justify-center gap-2 bg-white text-indigo-600 border border-indigo-200 px-4 py-3 md:px-6 md:py-3 rounded-lg font-semibold hover:bg-indigo-50 transition-colors text-sm md:text-base"
+                  >
+                    <FaCalendar className="w-3 h-3 md:w-4 md:h-4" />
+                    Ver Cronogramas
+                  </Link>
                 </div>
               </div>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-emerald-800">Taxa de conclusão</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-emerald-900">{completionRate}%</span>
-                    <div className={`w-2 h-2 rounded-full ${completionRate > 70 ? 'bg-emerald-500' : completionRate > 30 ? 'bg-amber-500' : 'bg-red-500'}`} />
+            ) : (
+              <>
+                {/* Progresso do Dia - Design Inspirador */}
+                <div className="bg-slate-50 rounded-xl p-4 md:p-5 mb-4 md:mb-6 border border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 md:mb-4">
+                    <div>
+                      <div className="text-slate-600 font-medium text-sm md:text-base mb-1">Progresso do Dia</div>
+                      <div className="text-2xl md:text-3xl font-bold text-slate-800">{completionRate}%</div>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <FaClock className="w-3 h-3 md:w-4 md:h-4" />
+                      <span className="font-medium">
+                        {todayActivities.reduce((total, a) => total + a.activitySnapshot.metadata.estimatedDuration, 0)} min total
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 md:h-3 bg-slate-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500"
+                      style={{ width: `${completionRate}%` }}
+                    />
                   </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-emerald-800">Tempo médio por atividade</span>
-                  <span className="font-medium text-emerald-900">18 min</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-emerald-800">Consistência</span>
-                  <span className="font-medium text-emerald-900">Alta</span>
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-emerald-200">
-                <div className="text-xs text-emerald-600">
-                  📈 <span className="font-medium">+12%</span> em relação à semana passada
-                </div>
-              </div>
-            </div>
 
-            {/* Suporte Rápido */}
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border border-purple-100 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-3 rounded-xl bg-gradient-to-br from-purple-100 to-purple-200">
-                  <FaComments className="w-6 h-6 text-purple-600" />
+                {/* Componente TodayActivities mantido */}
+                <div className="p-1">
+                  <TodayActivities
+                    activities={todayActivities}
+                    onActivityUpdate={refresh}
+                  />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-purple-900">Suporte</h3>
-                  <p className="text-sm text-purple-700">Estamos aqui para ajudar</p>
-                </div>
-              </div>
-              <p className="text-purple-800 mb-6">
-                Encontrou dificuldade? Nossa equipe de suporte está disponível para auxiliar no seu desenvolvimento.
-              </p>
-              <div className="space-y-3">
-                <button className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-200">
-                  Solicitar ajuda agora
-                </button>
-                <button className="w-full px-4 py-3 bg-white text-purple-700 border border-purple-200 rounded-xl font-medium hover:bg-purple-50 transition-colors">
-                  Ver FAQ
-                </button>
-              </div>
-            </div>
-          </div>
 
-          {/* Footer do Dashboard */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-500">
-              <div>
-                Nexus Platform • Dashboard do Estudante • v2.1
-              </div>
-              <div className="flex items-center gap-4">
-                <button className="text-gray-600 hover:text-purple-600 transition-colors">
-                  Feedback
-                </button>
-                <button className="text-gray-600 hover:text-purple-600 transition-colors">
-                  Ajuda
-                </button>
-                <button className="text-gray-600 hover:text-purple-600 transition-colors">
-                  Configurações
-                </button>
-              </div>
-            </div>
+                {/* Quick Actions - Mobile hidden, Desktop visible 
+                <div className="hidden md:flex gap-4 mt-6">
+                  <Link
+                    href="/student/schedules"
+                    className="flex-1 inline-flex items-center justify-center gap-3 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl font-bold hover:shadow-lg hover:shadow-indigo-200 transition-all text-sm md:text-base"
+                  >
+                    <FaCalendarDay className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="whitespace-nowrap">Ver Cronograma Completo</span>
+                  </Link>
+                  <Link
+                    href="/student/programs"
+                    className="flex-1 inline-flex items-center justify-center gap-3 bg-white text-indigo-600 border-2 border-slate-200 px-4 py-3 md:px-6 md:py-4 rounded-xl font-bold hover:bg-slate-50 transition-colors text-sm md:text-base"
+                  >
+                    <FaBook className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="whitespace-nowrap">Meus Programas</span>
+                  </Link>
+                </div>*/}
+              </>
+            )}
           </div>
         </div>
+
+        {/* SIDEBAR - Design Inspirador */}
+        <div className="space-y-4 md:space-y-6">
+          {/* Cronogramas */}
+          <div className="bg-white rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6">
+            <div className="flex justify-between items-center mb-3 md:mb-4">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm md:text-base">
+                <FaCalendar className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="whitespace-nowrap">Meus Cronogramas</span>
+              </h3>
+              <Link href="/student/schedules" className="text-indigo-600 hover:text-indigo-700">
+                <FaArrowRight className="w-3 h-3 md:w-3.5 md:h-3.5" />
+              </Link>
+            </div>
+
+            {instances.length === 0 ? (
+              <div className="text-center py-6 md:py-8 text-slate-400">
+                <FaCalendar className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-2" />
+                <p className="text-xs md:text-sm">Nenhum cronograma</p>
+              </div>
+            ) : (
+              <div className="space-y-2 md:space-y-3">
+                {instances.slice(0, 3).map(instance => (
+                  <Link
+                    key={instance.id}
+                    href={`/student/schedules/${instance.id}`}
+                    className="flex items-center gap-2 md:gap-3 p-3 md:p-4 bg-slate-50 rounded-lg md:rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                  >
+                    <div 
+                      className="w-2 h-2 md:w-3 md:h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: '#8b5cf6' }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-slate-800 truncate text-sm">
+                        Cronograma {instance.scheduleTemplateId?.slice(0, 8) || 'Ativo'}
+                      </div>
+                      <div className="flex items-center gap-2 md:gap-3 mt-1">
+                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full"
+                            style={{ 
+                              width: `${instance.progressCache?.completionPercentage || 0}%`,
+                              backgroundColor: '#8b5cf6'
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs md:text-sm font-semibold text-slate-600 min-w-6 md:min-w-10">
+                          {instance.progressCache?.completionPercentage || 0}%
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Lembretes */}
+          <div className="bg-amber-50 rounded-xl md:rounded-2xl p-4 md:p-6 border border-amber-200">
+            <div className="flex items-center gap-2 mb-3">
+              <FaBell className="w-4 h-4 md:w-5 md:h-5 text-amber-600" />
+              <h4 className="font-bold text-amber-800 text-sm md:text-base">Lembretes</h4>
+            </div>
+            <div className="space-y-2">
+              {pendingToday > 0 && (
+                <div className="text-amber-700 text-xs md:text-sm bg-white/50 p-2 md:p-3 rounded-lg">
+                  Você tem {pendingToday} atividades pendentes para hoje
+                </div>
+              )}
+              {student?.profile.streak !== undefined && student?.profile.streak > 0 && (
+                <div className="text-amber-700 text-xs md:text-sm bg-white/50 p-2 md:p-3 rounded-lg">
+                  Sequência de {student.profile.streak} dias! Continue assim! 🔥
+                </div>
+              )}
+              {instances.length > 0 && (
+                <div className="text-amber-700 text-xs md:text-sm bg-white/50 p-2 md:p-3 rounded-lg">
+                  {instances.length} cronograma(s) em andamento
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions para Mobile
+          {totalTodayActivities > 0 && (
+            <div className="md:hidden grid grid-cols-2 gap-3">
+              <Link
+                href="/student/schedules"
+                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-4 py-3 rounded-lg font-semibold hover:shadow-md transition-all text-sm"
+              >
+                <FaCalendarDay className="w-3 h-3" />
+                <span>Cronograma</span>
+              </Link>
+              <Link
+                href="/student/programs"
+                className="inline-flex items-center justify-center gap-2 bg-white text-indigo-600 border border-slate-200 px-4 py-3 rounded-lg font-semibold hover:bg-slate-50 transition-colors text-sm"
+              >
+                <FaBook className="w-3 h-3" />
+                <span>Programas</span>
+              </Link>
+            </div>
+          )} */}
+        </div>
       </div>
-      );
+    </div>
+  );
 }
