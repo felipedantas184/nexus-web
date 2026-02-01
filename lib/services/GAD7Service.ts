@@ -13,7 +13,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
-import { GAD7Assessment, GAD7Response, GAD7Status } from '@/types/assessments';
+import { GAD7Assessment, GAD7Response, GAD7Status } from '@/types/GAD7';
 import { DateUtils } from '@/lib/utils/dateUtils';
 
 export class GAD7Service {
