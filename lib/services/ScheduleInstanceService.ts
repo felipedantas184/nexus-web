@@ -28,6 +28,7 @@ import { ActivityService } from './ActivityService';
 import { DateUtils } from '@/lib/utils/dateUtils';
 import { AuditService } from '@/lib/auth/AuditService';
 import { UserService } from '@/lib/auth/UserService';
+import { ProgressService } from './ProgressService';
 
 export class ScheduleInstanceService {
   private static readonly COLLECTIONS = {
@@ -449,6 +450,66 @@ export class ScheduleInstanceService {
       throw error;
     }
   }
+
+  static async getWeekActivities(studentId: string, weekNumber?: number): Promise<ActivityProgress[]> {
+  try {
+    console.log('🔍 [getWeekActivities] Buscando atividades da semana para aluno:', studentId);
+    
+    // Se weekNumber não for fornecido, usa a semana atual
+    const targetWeekNumber = weekNumber || DateUtils.getWeekNumber(new Date());
+    console.log('📅 [getWeekActivities] Semana alvo:', targetWeekNumber);
+    
+    // Buscar instâncias ativas
+    const activeInstances = await this.getStudentActiveInstances(studentId, {
+      includeProgress: false,
+      limit: 10
+    });
+    
+    console.log('📋 [getWeekActivities] Instâncias ativas encontradas:', activeInstances.length);
+    
+    const allActivities: ActivityProgress[] = [];
+    
+    for (const instance of activeInstances) {
+      console.log(`📋 [getWeekActivities] Processando instância: ${instance.id}`);
+      console.log(`📋 [getWeekActivities] Semana da instância: ${instance.currentWeekNumber}`);
+      
+      try {
+        // Buscar atividades de todos os dias da semana atual da instância
+        for (let day = 0; day < 7; day++) {
+          const activities = await ProgressService.getActivitiesByWeekAndDay(
+            studentId,
+            instance.id,
+            instance.currentWeekNumber,
+            day
+          );
+          
+          if (activities.length > 0) {
+            console.log(`📋 [getWeekActivities] Encontradas ${activities.length} atividades para dia ${day}`);
+            allActivities.push(...activities);
+          }
+        }
+      } catch (err) {
+        console.error(`❌ [getWeekActivities] Erro ao buscar atividades para instância ${instance.id}:`, err);
+      }
+    }
+    
+    console.log('✅ [getWeekActivities] Total de atividades da semana:', allActivities.length);
+    
+    // Agrupar por dia da semana para log
+    const activitiesByDay: Record<number, number> = {};
+    allActivities.forEach(activity => {
+      activitiesByDay[activity.dayOfWeek] = (activitiesByDay[activity.dayOfWeek] || 0) + 1;
+    });
+    
+    console.log('📊 [getWeekActivities] Distribuição por dia:', activitiesByDay);
+    
+    return allActivities;
+    
+  } catch (error) {
+    console.error('❌ [getWeekActivities] Erro geral:', error);
+    throw error;
+  }
+}
 
   /**
    * Atualiza status de uma instância

@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { 
+import {
   FaCalendarDay,
   FaClock,
   FaTrophy,
@@ -19,6 +19,7 @@ import { FaListCheck } from 'react-icons/fa6';
 // Dias da semana em português
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const FULL_DAYS_OF_WEEK = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 interface ScheduleWeekViewProps {
   selectedDay: number;
@@ -46,18 +47,18 @@ export default function ScheduleWeekView({
     const now = new Date();
     const currentDay = now.getDay();
     const currentDate = now.getDate();
-    
+
     const startOfWeek = new Date(now);
     startOfWeek.setDate(currentDate - currentDay + (weekOffset * 7));
     startOfWeek.setHours(0, 0, 0, 0);
-    
+
     const weekDates = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
       weekDates.push(date);
     }
-    
+
     return weekDates;
   };
 
@@ -110,11 +111,11 @@ export default function ScheduleWeekView({
   };
 
   // Filtrar atividades para o dia selecionado
-  // Em um sistema real, você buscaria atividades específicas do dia
-  // Por enquanto, usamos as atividades de hoje como exemplo quando o dia é hoje
-  const dayActivities = selectedDay === currentDate.getDay() && isCurrentWeek 
-    ? weekActivities 
-    : [];
+  const dayActivities = weekActivities.filter(activity => {
+    // Filtra atividades do dia selecionado
+    // Além disso, se tiver weekNumber no progresso, pode verificar também
+    return activity.dayOfWeek === selectedDay;
+  });
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -122,38 +123,50 @@ export default function ScheduleWeekView({
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-gray-900">Visualização Semanal</h3>
-          <div className="text-sm text-gray-500">
-            {FULL_DAYS_OF_WEEK[selectedDay]}, {formatDate(weekDates[selectedDay])}
-          </div>
         </div>
       </div>
-      
+
       {/* Tabs dos Dias da Semana */}
       <div className="border-b border-gray-200">
         <div className="flex overflow-x-auto">
-          {DAYS_OF_WEEK.map((day, index) => {
-            const date = weekDates[index];
-            const isToday = date.getDate() === currentDate.getDate() && 
-                            date.getMonth() === currentDate.getMonth() && 
-                            date.getFullYear() === currentDate.getFullYear();
-            const isSelected = selectedDay === index;
-            
+          {WEEK_ORDER.map((dayIndex) => {
+            const day = DAYS_OF_WEEK[dayIndex];
+            const date = weekDates[dayIndex];
+
+            const isToday =
+              date.getDate() === currentDate.getDate() &&
+              date.getMonth() === currentDate.getMonth() &&
+              date.getFullYear() === currentDate.getFullYear();
+
+            const isSelected = selectedDay === dayIndex;
+
             return (
               <button
-                key={index}
-                onClick={() => onDaySelect(index)}
-                className={`flex flex-col items-center p-4 min-w-[100px] transition-all duration-200 ${
-                  isSelected
+                key={dayIndex}
+                onClick={() => onDaySelect(dayIndex)}
+                className={`flex flex-col items-center p-4 min-w-[100px] transition-all duration-200 ${isSelected
                     ? 'bg-gradient-to-br from-blue-50 to-cyan-50 border-b-2 border-blue-500'
                     : 'hover:bg-gray-50'
-                }`}
+                  }`}
               >
-                <div className={`text-sm font-medium ${isSelected ? 'text-blue-700' : 'text-gray-600'}`}>
+                <div
+                  className={`text-sm font-medium ${isSelected ? 'text-blue-700' : 'text-gray-600'
+                    }`}
+                >
                   {day}
                 </div>
-                <div className={`text-lg font-bold mt-1 ${isToday ? 'text-blue-600' : isSelected ? 'text-blue-800' : 'text-gray-700'}`}>
+
+                <div
+                  className={`text-lg font-bold mt-1 ${isToday
+                      ? 'text-blue-600'
+                      : isSelected
+                        ? 'text-blue-800'
+                        : 'text-gray-700'
+                    }`}
+                >
                   {date.getDate()}
                 </div>
+
                 {isToday && (
                   <div className="w-2 h-2 bg-blue-500 rounded-full mt-1"></div>
                 )}
@@ -162,13 +175,13 @@ export default function ScheduleWeekView({
           })}
         </div>
       </div>
-      
+
       {/* Atividades do Dia Selecionado */}
       <div className="p-6">
         <h4 className="font-bold text-gray-900 text-lg mb-6">
           Atividades para {FULL_DAYS_OF_WEEK[selectedDay]}
         </h4>
-        
+
         {dayActivities.length === 0 ? (
           <div className="text-center py-12">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl mb-6">
@@ -186,10 +199,10 @@ export default function ScheduleWeekView({
             {dayActivities.map(activity => {
               const status = getActivityStatus(activity);
               const isExpanded = expandedActivity === activity.id;
-              
+
               return (
                 <div key={activity.id} className="border border-gray-200 rounded-2xl overflow-hidden hover:shadow-sm transition-shadow duration-300">
-                  <div 
+                  <div
                     className="p-5 cursor-pointer bg-gradient-to-r from-white to-gray-50 hover:from-gray-50 transition-all duration-200"
                     onClick={() => onActivityExpand(isExpanded ? '' : activity.id)}
                   >
@@ -217,7 +230,7 @@ export default function ScheduleWeekView({
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="flex flex-col items-end gap-3">
                         <span className={`px-3 py-1 text-xs font-medium rounded-full ${status.color}`}>
                           {status.label}
@@ -231,7 +244,7 @@ export default function ScheduleWeekView({
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Executor de Atividade Expandido */}
                   {isExpanded && (
                     <div className="border-t border-gray-200 p-5">

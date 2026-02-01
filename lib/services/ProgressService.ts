@@ -484,4 +484,74 @@ export class ProgressService {
       };
     }
   }
+
+  /**
+ * Busca atividades por semana e dia da semana
+ */
+  static async getActivitiesByWeekAndDay(
+    studentId: string,
+    scheduleInstanceId: string,
+    weekNumber: number,
+    dayOfWeek: number
+  ): Promise<ActivityProgress[]> {
+    try {
+      console.log('🔍 [getActivitiesByWeekAndDay] Buscando atividades:', {
+        studentId,
+        scheduleInstanceId,
+        weekNumber,
+        dayOfWeek
+      });
+
+      // Importar funções do Firestore necessárias
+      const { collection, query, where, getDocs } = await import('firebase/firestore');
+
+      // Criar query para buscar atividades específicas
+      const q = query(
+        collection(firestore, this.COLLECTIONS.PROGRESS),
+        where('studentId', '==', studentId),
+        where('scheduleInstanceId', '==', scheduleInstanceId),
+        where('weekNumber', '==', weekNumber),
+        where('dayOfWeek', '==', dayOfWeek),
+        where('isActive', '==', true)
+      );
+
+      const snapshot = await getDocs(q);
+      const activities: ActivityProgress[] = [];
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+
+        // Converter timestamps do Firestore para Date
+        const activity: ActivityProgress = {
+          id: doc.id,
+          ...data,
+          scheduledDate: data.scheduledDate?.toDate(),
+          startedAt: data.startedAt?.toDate(),
+          completedAt: data.completedAt?.toDate(),
+          createdAt: data.createdAt?.toDate(),
+          updatedAt: data.updatedAt?.toDate(),
+          activitySnapshot: {
+            ...data.activitySnapshot,
+            createdAt: data.activitySnapshot?.createdAt?.toDate(),
+            updatedAt: data.activitySnapshot?.updatedAt?.toDate()
+          }
+        } as ActivityProgress;
+
+        activities.push(activity);
+      });
+
+      console.log(`✅ [getActivitiesByWeekAndDay] Encontradas ${activities.length} atividades`);
+
+      // Log detalhado para debug
+      activities.forEach((activity, index) => {
+        console.log(`  ${index + 1}. ${activity.activitySnapshot?.title || 'Sem título'} (${activity.status})`);
+      });
+
+      return activities;
+
+    } catch (error: any) {
+      console.error('❌ [getActivitiesByWeekAndDay] Erro:', error);
+      throw new Error(`Erro ao buscar atividades: ${error.message}`);
+    }
+  }
 }

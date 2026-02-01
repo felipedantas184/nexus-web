@@ -14,6 +14,7 @@ export function useStudentSchedule() {
   const { user } = useAuth();
   const [instances, setInstances] = useState<(ScheduleInstance & { progress?: ActivityProgress[] })[]>([]);
   const [todayActivities, setTodayActivities] = useState<ActivityProgress[]>([]);
+  const [weekActivities, setWeekActivities] = useState<ActivityProgress[]>([]); // NOVO
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,6 +23,7 @@ export function useStudentSchedule() {
       console.log('🚫 Usuário não é aluno ou não logado');
       setInstances([]);
       setTodayActivities([]);
+      setWeekActivities([]); // NOVO
       setLoading(false);
       return;
     }
@@ -42,13 +44,14 @@ export function useStudentSchedule() {
       console.log('📅 Buscando atividades de hoje...');
       const today = await ScheduleInstanceService.getTodayActivities(user.id);
       console.log('✅ Atividades de hoje encontradas:', today.length);
-
-      // Log detalhado
-      today.forEach((activity, index) => {
-        console.log(`  ${index + 1}. ${activity.id} - ${activity.activitySnapshot.title} (${activity.status})`);
-      });
-
       setTodayActivities(today);
+
+      // NOVO: Carregar atividades da semana atual
+      console.log('📅 Buscando atividades da semana...');
+      const week = await ScheduleInstanceService.getWeekActivities(user.id);
+      console.log('✅ Atividades da semana encontradas:', week.length);
+      setWeekActivities(week);
+
       setError(null);
 
     } catch (err: any) {
@@ -200,6 +203,7 @@ export function useStudentSchedule() {
   return {
     instances,
     todayActivities,
+    weekActivities,
     loading,
     error,
     refresh: loadData,

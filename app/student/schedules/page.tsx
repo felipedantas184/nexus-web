@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
+import {
   FaPlus,
   FaSearch,
   FaSync,
@@ -30,6 +30,7 @@ export default function MySchedulesPage() {
   const {
     instances,
     todayActivities,
+    weekActivities, // NOVO
     loading,
     error,
     refresh,
@@ -37,7 +38,7 @@ export default function MySchedulesPage() {
   } = useStudentSchedule();
 
   // Estados para visualização
-  const [activeView, setActiveView] = useState<'calendar' | 'week' | 'list'>('calendar');
+  const [activeView, setActiveView] = useState<'calendar' | 'week' | 'list'>('week');
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay());
   const [selectedWeek, setSelectedWeek] = useState<number>(0);
   const [expandedSchedule, setExpandedSchedule] = useState<string | null>(null);
@@ -49,9 +50,9 @@ export default function MySchedulesPage() {
   const getScheduleStats = () => {
     const totalInstances = instances.length;
     const activeInstances = instances.filter(i => i.status === 'active').length;
-    const completedActivities = instances.reduce((total, instance) => 
+    const completedActivities = instances.reduce((total, instance) =>
       total + (instance.progressCache?.completedActivities || 0), 0);
-    const totalActivities = instances.reduce((total, instance) => 
+    const totalActivities = instances.reduce((total, instance) =>
       total + (instance.progressCache?.totalActivities || 0), 0);
     const completionRate = totalActivities > 0 ? (completedActivities / totalActivities) * 100 : 0;
 
@@ -118,36 +119,22 @@ export default function MySchedulesPage() {
           {/* Tabs de Visualização */}
           <div className="flex items-center gap-2 bg-gray-100 p-2 rounded-xl">
             <button
-              onClick={() => setActiveView('calendar')}
-              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-                activeView === 'calendar' 
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm' 
-                  : 'text-gray-600 hover:bg-white'
-              }`}
-            >
-              <FiCalendar className="w-4 h-4" />
-              <span>Calendário</span>
-            </button>
-            
-            <button
               onClick={() => setActiveView('week')}
-              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-                activeView === 'week' 
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-sm' 
-                  : 'text-gray-600 hover:bg-white'
-              }`}
+              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${activeView === 'week'
+                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-white'
+                }`}
             >
               <FiGrid className="w-4 h-4" />
               <span>Semana</span>
             </button>
-            
+
             <button
               onClick={() => setActiveView('list')}
-              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
-                activeView === 'list' 
-                  ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-sm' 
-                  : 'text-gray-600 hover:bg-white'
-              }`}
+              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-200 ${activeView === 'list'
+                ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-white'
+                }`}
             >
               <FiList className="w-4 h-4" />
               <span>Lista</span>
@@ -166,7 +153,7 @@ export default function MySchedulesPage() {
                 className="pl-10 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent w-full sm:w-64"
               />
             </div>
-            
+
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
@@ -185,23 +172,11 @@ export default function MySchedulesPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Calendário Principal (2/3 da tela) */}
         <div className="lg:col-span-2">
-          {activeView === 'calendar' ? (
-            <ScheduleCalendar
-              selectedDay={selectedDay}
-              selectedWeek={selectedWeek}
-              onDaySelect={setSelectedDay}
-              onWeekChange={setSelectedWeek}
-              todayActivities={todayActivities}
-              onActivitySelect={(activity) => {
-                // Implementar ação quando atividade é selecionada
-                console.log('Atividade selecionada:', activity);
-              }}
-            />
-          ) : activeView === 'week' ? (
+          {activeView === 'week' ? (
             <ScheduleWeekView
               selectedDay={selectedDay}
               selectedWeek={selectedWeek}
-              weekActivities={todayActivities} // Em produção, buscar atividades específicas da semana
+              weekActivities={weekActivities} // MODIFICADO: usar weekActivities em vez de todayActivities
               expandedActivity={expandedActivity}
               onDaySelect={setSelectedDay}
               onActivityExpand={setExpandedActivity}
@@ -218,7 +193,7 @@ export default function MySchedulesPage() {
                   </div>
                 </div>
               </div>
-              
+
               {instances.length === 0 ? (
                 <div className="p-12 text-center">
                   <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl mb-6">
@@ -271,13 +246,12 @@ export default function MySchedulesPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                                instance.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
+                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${instance.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
                                 instance.status === 'paused' ? 'bg-amber-100 text-amber-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
                                 {instance.status === 'active' ? 'Ativo' :
-                                 instance.status === 'paused' ? 'Pausado' : 'Concluído'}
+                                  instance.status === 'paused' ? 'Pausado' : 'Concluído'}
                               </span>
                             </td>
                             <td className="px-6 py-4">
