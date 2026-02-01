@@ -1,8 +1,9 @@
+// components/schedule/ScheduleBuilder.tsx - VERSÃO CORRIGIDA
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  CreateScheduleDTO, 
+import {
+  CreateScheduleDTO,
   CreateActivityDTO
 } from '@/types/schedule';
 import { useScheduleForm } from '@/hooks/useScheduleForm';
@@ -11,8 +12,8 @@ import WeekScheduleGrid from './WeekScheduleGrid';
 import ScheduleHeaderPanel from './ScheduleHeaderPanel';
 import ScheduleConfirmation from './ScheduleConfirmation';
 import QuickActivityModal from './QuickActivityModal';
-import { 
-  FaSave, 
+import {
+  FaSave,
   FaEye,
   FaListOl,
   FaCalendarCheck
@@ -39,8 +40,8 @@ export default function ScheduleBuilder({
   const [viewMode, setViewMode] = useState<ViewMode>('schedule');
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [editingActivity, setEditingActivity] = useState<{ 
-    day: number; 
+  const [editingActivity, setEditingActivity] = useState<{
+    day: number;
     activity: CreateActivityDTO;
     index: number;
   } | null>(null);
@@ -76,6 +77,12 @@ export default function ScheduleBuilder({
   };
 
   const handleEditActivity = (day: number, activity: CreateActivityDTO, index: number) => {
+    // ✅ VALIDAÇÃO EXTRA: Verificar se o índice é válido
+    if (index < 0 || index >= formData.activities.length) {
+      console.error('Índice inválido para edição:', index);
+      return;
+    }
+
     setSelectedDay(day);
     setEditingActivity({ day, activity, index });
     setShowActivityModal(true);
@@ -87,14 +94,20 @@ export default function ScheduleBuilder({
     // Para cada dia selecionado (incluindo o dia original)
     repeatDays.forEach(day => {
       if (editingActivity && day === selectedDay) {
-        // Editar atividade existente
-        updateActivity(editingActivity.index, activityData);
+        // ✅ CORREÇÃO: Usar índice global correto
+        updateActivity(editingActivity.index, {
+          ...activityData,
+          dayOfWeek: day
+        });
       } else {
-        // Adicionar nova atividade (ou copiar para outros dias)
+        // ✅ CORREÇÃO: Calcular orderIndex correto para novo dia
+        const activitiesForDay = formData.activities.filter(a => a.dayOfWeek === day);
+        const orderIndex = activitiesForDay.length;
+
         const newActivity: CreateActivityDTO = {
           ...activityData,
           dayOfWeek: day,
-          orderIndex: formData.activities.filter(a => a.dayOfWeek === day).length
+          orderIndex
         };
         addActivity(newActivity);
       }
@@ -105,16 +118,25 @@ export default function ScheduleBuilder({
     setEditingActivity(null);
   };
 
+  // ✅ CORREÇÃO: Validação antes de remover
   const handleRemoveActivity = (day: number, index: number) => {
-    if (confirm('Tem certeza que deseja remover esta atividade?')) {
-      removeActivity(index);
+    // Validação de índice
+    if (index < 0 || index >= formData.activities.length) {
+      console.error('Índice inválido para remoção:', index);
+      return;
     }
+
+    removeActivity(index);
   };
 
   const handleDuplicateActivity = (day: number, activity: CreateActivityDTO) => {
+    const activitiesForDay = formData.activities.filter(a => a.dayOfWeek === day);
+    const orderIndex = activitiesForDay.length;
+
     const newActivity: CreateActivityDTO = {
       ...activity,
-      orderIndex: formData.activities.filter(a => a.dayOfWeek === day).length,
+      dayOfWeek: day,
+      orderIndex,
       title: `${activity.title} (Cópia)`
     };
     addActivity(newActivity);
@@ -128,11 +150,11 @@ export default function ScheduleBuilder({
 
     try {
       const result = await submitForm(user.id);
-      
+
       if (onSuccess) {
         onSuccess(result.scheduleId);
       }
-      
+
       alert(isEditing ? 'Cronograma atualizado com sucesso!' : 'Cronograma criado com sucesso!');
     } catch (err: any) {
       alert(err.message || 'Erro ao salvar cronograma');
@@ -141,16 +163,16 @@ export default function ScheduleBuilder({
 
   // Calcular estatísticas
   const totalActivities = formData.activities.length;
-  const totalDuration = formData.activities.reduce((sum, act) => 
+  const totalDuration = formData.activities.reduce((sum, act) =>
     sum + (act.metadata.estimatedDuration || 0), 0
   );
-  const totalPoints = formData.activities.reduce((sum, act) => 
+  const totalPoints = formData.activities.reduce((sum, act) =>
     sum + (act.scoring.pointsOnCompletion || 0), 0
   );
 
   return (
     <div className="space-y-8">
-      {/* Painel de Configurações - NO TOPO, NÃO STICKY */}
+      {/* Painel de Configurações */}
       <ScheduleHeaderPanel
         formData={formData}
         errors={errors}
@@ -170,11 +192,10 @@ export default function ScheduleBuilder({
               <button
                 type="button"
                 onClick={() => setViewMode('schedule')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                  viewMode === 'schedule'
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'schedule'
                     ? 'bg-white text-indigo-600 shadow'
                     : 'text-gray-600 hover:text-gray-800'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <FaCalendarCheck className="w-4 h-4" />
@@ -184,11 +205,10 @@ export default function ScheduleBuilder({
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                  viewMode === 'list'
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'list'
                     ? 'bg-white text-indigo-600 shadow'
                     : 'text-gray-600 hover:text-gray-800'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <FaListOl className="w-4 h-4" />
@@ -198,11 +218,10 @@ export default function ScheduleBuilder({
               <button
                 type="button"
                 onClick={() => setViewMode('preview')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                  viewMode === 'preview'
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'preview'
                     ? 'bg-white text-indigo-600 shadow'
                     : 'text-gray-600 hover:text-gray-800'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <FaEye className="w-4 h-4" />
@@ -253,7 +272,7 @@ export default function ScheduleBuilder({
         )}
       </div>
 
-      {/* Confirmação - AGORA EMBAIXO */}
+      {/* Confirmação */}
       <ScheduleConfirmation
         onCancel={onCancel}
         onSubmit={handleSubmit}

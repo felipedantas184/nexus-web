@@ -187,20 +187,15 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
         {/* SEÇÃO PRINCIPAL - Atividades */}
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           <div className="bg-white rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 md:mb-6">
+            <div className="flex flex-row sm:flex-row sm:items-center justify-between gap-2 mb-4 md:mb-6">
               <h2 className="text-lg md:text-xl font-bold text-slate-800 flex items-center gap-2">
                 <FaCalendarDay className="w-4 h-4 md:w-5 md:h-5" />
-                <span className="whitespace-nowrap">Suas Atividades de Hoje</span>
+                <span className="whitespace-nowrap">Atividades de Hoje</span>
               </h2>
               <div className="flex items-center justify-between sm:justify-end gap-4">
                 <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs md:text-sm font-bold">
                   {completedToday}/{totalTodayActivities}
                 </span>
-                {totalTodayActivities > 0 && (
-                  <button className="sm:hidden px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium text-xs transition-colors">
-                    Ver todas
-                  </button>
-                )}
               </div>
             </div>
 
@@ -253,7 +248,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                 </div>
 
                 {/* Componente TodayActivities mantido */}
-                <div className="p-1">
+                <div>
                   <TodayActivities
                     activities={todayActivities}
                     onActivityUpdate={refresh}
@@ -328,7 +323,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                           />
                         </div>
                         <span className="text-xs md:text-sm font-semibold text-slate-600 min-w-6 md:min-w-10">
-                          {instance.progressCache?.completionPercentage || 0}%
+                          {(instance.progressCache?.completionPercentage) && Math.round(instance.progressCache?.completionPercentage) || 0}%
                         </span>
                       </div>
                     </div>

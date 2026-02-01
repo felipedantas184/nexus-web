@@ -1,4 +1,4 @@
-// hooks/useScheduleForm.ts
+// hooks/useScheduleForm.ts - VERSÃO CORRIGIDA
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -14,9 +14,9 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
     return today;
   };
 
-  // Calcula data de término padrão (4 semanas depois, zerada)
+  // ✅ CORREÇÃO: 4 semanas = 28 dias
   const getDefaultEndDate = () => {
-    const fourWeeksLater = new Date(getTodayDate().getTime() + (6 * 24 * 60 * 60 * 1000));
+    const fourWeeksLater = new Date(getTodayDate().getTime() + (28 * 24 * 60 * 60 * 1000)); // ✅ 28 dias
     fourWeeksLater.setHours(0, 0, 0, 0);
     return fourWeeksLater;
   };
@@ -29,13 +29,13 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
     description: '',
     category: 'educational',
     startDate: defaultStartDate,
-    endDate: defaultEndDate, // OBRIGATÓRIO
-    activeDays: [0, 1, 2, 3, 4, 5, 6], // Seg a Sex por padrão
+    endDate: defaultEndDate,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
     repeatRules: {
       resetOnRepeat: true,
     },
     activities: [],
-    ...initialData // Sobrescreve com dados iniciais se fornecidos
+    ...initialData
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,7 +46,6 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
       ...prev,
       [field]: value
     }));
-    // Limpar erro do campo quando atualizado
     if (errors[field]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -56,16 +55,29 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
     }
   }, [errors]);
 
+  // ✅ CORREÇÃO: Adicionar atividade com índices consistentes
   const addActivity = useCallback((activity: CreateActivityDTO) => {
     setFormData(prev => {
-      // Valida se a atividade está em dia ativo
       if (!prev.activeDays.includes(activity.dayOfWeek)) {
         const errorMsg = `Dia ${activity.dayOfWeek} não está ativo no cronograma`;
         setErrors(prevErrors => ({ ...prevErrors, activities: errorMsg }));
         return prev;
       }
 
-      // Limpa erro de atividades se existir
+      // Verificar e ajustar orderIndex para evitar conflitos
+      const activitiesForDay = prev.activities.filter(a => a.dayOfWeek === activity.dayOfWeek);
+      const existingIndices = activitiesForDay.map(a => a.orderIndex);
+      
+      let orderIndex = activity.orderIndex;
+      while (existingIndices.includes(orderIndex)) {
+        orderIndex++;
+      }
+      
+      const activityWithAdjustedIndex = {
+        ...activity,
+        orderIndex
+      };
+
       if (errors.activities) {
         setErrors(prevErrors => {
           const newErrors = { ...prevErrors };
@@ -76,15 +88,30 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
 
       return {
         ...prev,
-        activities: [...prev.activities, activity]
+        activities: [...prev.activities, activityWithAdjustedIndex]
       };
     });
   }, [errors]);
 
+  // ✅ CORREÇÃO: Atualizar atividade mantendo consistência
   const updateActivity = useCallback((index: number, activity: Partial<CreateActivityDTO>) => {
     setFormData(prev => {
+      if (index < 0 || index >= prev.activities.length) {
+        console.error('Índice de atividade inválido:', index);
+        return prev;
+      }
+
       const newActivities = [...prev.activities];
-      newActivities[index] = { ...newActivities[index], ...activity };
+      const originalActivity = newActivities[index];
+      
+      // Preserva orderIndex original se não foi especificado
+      const updatedActivity = {
+        ...originalActivity,
+        ...activity,
+        orderIndex: activity.orderIndex !== undefined ? activity.orderIndex : originalActivity.orderIndex
+      };
+
+      newActivities[index] = updatedActivity;
 
       // Valida se o dia atualizado está ativo
       if (activity.dayOfWeek !== undefined && !prev.activeDays.includes(activity.dayOfWeek)) {
@@ -97,25 +124,47 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
     });
   }, []);
 
+  // ✅ CORREÇÃO: Remover atividade e reordenar as restantes do mesmo dia
   const removeActivity = useCallback((index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      activities: prev.activities.filter((_, i) => i !== index)
-    }));
+    setFormData(prev => {
+      if (index < 0 || index >= prev.activities.length) {
+        console.error('Índice de atividade inválido para remoção:', index);
+        return prev;
+      }
+
+      const activityToRemove = prev.activities[index];
+      
+      // Remove a atividade
+      const filteredActivities = prev.activities.filter((_, i) => i !== index);
+      
+      // Reordena atividades do mesmo dia
+      const reorderedActivities = filteredActivities.map(activity => {
+        if (activity.dayOfWeek === activityToRemove.dayOfWeek && activity.orderIndex > activityToRemove.orderIndex) {
+          return {
+            ...activity,
+            orderIndex: activity.orderIndex - 1
+          };
+        }
+        return activity;
+      });
+
+      return {
+        ...prev,
+        activities: reorderedActivities
+      };
+    });
   }, []);
 
   const validateForm = useCallback((): boolean => {
     const validation = ValidationUtils.validateScheduleData(formData);
 
     if (!validation.isValid) {
-      // Converter erros para formato de campo + manter lista completa
       const fieldErrors: Record<string, string> = {};
-      const allErrors: string[] = []; // Para debug
+      const allErrors: string[] = [];
 
       validation.errors.forEach(error => {
-        allErrors.push(error); // Guarda todos os erros
+        allErrors.push(error);
 
-        // Mapeia erros para campos específicos
         if (error.includes('Nome')) fieldErrors.name = error;
         else if (error.includes('Data de início')) fieldErrors.startDate = error;
         else if (error.includes('Data de término')) fieldErrors.endDate = error;
@@ -123,7 +172,6 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
           fieldErrors.activeDays = error;
         }
         else if (error.includes('atividade') || error.includes('Atividade')) {
-          // Se já tem erro de atividades, adiciona à lista
           if (fieldErrors.activities) {
             fieldErrors.activities = `${fieldErrors.activities}; ${error}`;
           } else {
@@ -135,7 +183,6 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
         }
       });
 
-      // ADICIONE ESTE CONSOLE.LOG PARA DEBUG
       console.log('Erros de validação:', {
         errors: validation.errors,
         formData: {
@@ -156,7 +203,6 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
   }, [formData]);
 
   const submitForm = useCallback(async (professionalId: string) => {
-    // Validação com ValidationUtils
     if (!validateForm()) {
       throw new Error('Formulário inválido. Corrija os erros antes de salvar.');
     }
@@ -192,7 +238,6 @@ export function useScheduleForm(initialData?: Partial<CreateScheduleDTO>) {
 
       return result;
     } catch (error: any) {
-      // Extrair mensagem de erro do Firebase/ScheduleService
       const errorMessage = error.message || 'Erro ao salvar cronograma';
       setErrors({ _general: errorMessage });
       throw error;

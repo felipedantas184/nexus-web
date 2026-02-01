@@ -1,3 +1,4 @@
+// components/schedule/WeekScheduleGrid.tsx - VERSÃO CORRIGIDA
 'use client';
 
 import React, { useState } from 'react';
@@ -58,6 +59,7 @@ export default function WeekScheduleGrid({
     return colors[type] || 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
+  // ✅ CORREÇÃO: Usar filtro correto e mapeamento de índices
   const getActivitiesByDay = (day: number) => {
     return formData.activities
       .filter(activity => activity.dayOfWeek === day)
@@ -84,13 +86,17 @@ export default function WeekScheduleGrid({
 
   const [quickAddingDay, setQuickAddingDay] = useState<number | null>(null);
 
+  // ✅ CORREÇÃO: Adição com orderIndex correto
   const handleAddQuickActivity = (title: string, day: number) => {
+    const activitiesForDay = getActivitiesByDay(day);
+    const nextOrderIndex = activitiesForDay.length;
+
     const defaultQuickActivity: CreateActivityDTO = {
       dayOfWeek: day,
-      orderIndex: formData.activities.filter(a => a.dayOfWeek === day).length,
+      orderIndex: nextOrderIndex,
       type: 'quick',
       title: title,
-      description: title, // Usa o mesmo título como descrição
+      description: title,
       instructions: `Complete a atividade: ${title}`,
       config: {
         requiresConfirmation: true,
@@ -98,12 +104,12 @@ export default function WeekScheduleGrid({
       },
       scoring: {
         isRequired: true,
-        pointsOnCompletion: 10, // Pontos padrão para atividades rápidas
+        pointsOnCompletion: 10,
         bonusPoints: 0
       },
       metadata: {
-        estimatedDuration: 60, //
-        difficulty: 'easy', // Fácil por padrão
+        estimatedDuration: 60,
+        difficulty: 'easy',
         therapeuticFocus: [],
         educationalFocus: []
       },
@@ -111,23 +117,24 @@ export default function WeekScheduleGrid({
       pointsOnCompletion: 10
     };
 
-    // Encontra a posição correta para inserir
-    const activitiesForDay = formData.activities.filter(a => a.dayOfWeek === day);
-    const newIndex = activitiesForDay.length;
-
-    // Usa a função do hook para adicionar
-    const newActivities = [...formData.activities];
-    newActivities.splice(
-      formData.activities.findIndex(a => a.dayOfWeek === day && a.orderIndex === newIndex),
-      0,
-      defaultQuickActivity
-    );
-
-    // Atualiza o formData
+    // Adiciona ao final do array de atividades
+    const newActivities = [...formData.activities, defaultQuickActivity];
     updateField('activities', newActivities);
-
-    // Sai do modo de adição rápida
     setQuickAddingDay(null);
+  };
+
+  // ✅ CORREÇÃO: Função para encontrar índice global
+  const findGlobalActivityIndex = (day: number, localIndex: number): number => {
+    const activitiesForDay = getActivitiesByDay(day);
+    if (localIndex >= activitiesForDay.length) return -1;
+
+    const targetActivity = activitiesForDay[localIndex];
+    return formData.activities.findIndex(
+      activity =>
+        activity.dayOfWeek === targetActivity.dayOfWeek &&
+        activity.orderIndex === targetActivity.orderIndex &&
+        activity.title === targetActivity.title // Verificação extra para segurança
+    );
   };
 
   return (
@@ -231,110 +238,122 @@ export default function WeekScheduleGrid({
               <div className="p-4 max-h-[400px] overflow-y-auto">
                 {hasActivities ? (
                   <div className="space-y-3">
-                    {activities.map((activity, index) => (
-                      <div
-                        key={`${day.id}-${index}`}
-                        className="group bg-white border border-gray-200 rounded-lg p-4 hover:border-indigo-200 hover:shadow-sm transition-all"
-                      >
-                        <div className="flex items-start gap-3">
-                          {/* Ícone do Tipo */}
-                          <div className={`w-10 h-10 rounded-lg border flex items-center justify-center ${getActivityColor(activity.type)} text-lg`}>
-                            {getActivityIcon(activity.type)}
-                          </div>
+                    {activities.map((activity, localIndex) => {
+                      // ✅ CORREÇÃO: Encontrar índice global correto
+                      const globalIndex = findGlobalActivityIndex(day.id, localIndex);
 
-                          {/* Conteúdo da Atividade */}
-                          <div className="flex-1 min-w-0">
-                            {/* CABEÇALHO COM TÍTULO E BOTÕES DISCRETOS */}
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="flex-1">
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <h4 className="font-semibold text-gray-800 text-sm mb-1">
-                                      {activity.title}
-                                    </h4>
-                                    <div className="flex items-center gap-3">
-                                      <span className={`text-xs px-2 py-1 rounded-full ${getActivityColor(activity.type)}`}>
-                                        {activity.type === 'quick' && 'Rápida'}
-                                        {activity.type === 'text' && 'Texto'}
-                                        {activity.type === 'quiz' && 'Quiz'}
-                                        {activity.type === 'video' && 'Vídeo'}
-                                        {activity.type === 'checklist' && 'Checklist'}
-                                        {activity.type === 'file' && 'Arquivo'}
-                                      </span>
+                      return (
+                        <div
+                          key={`${day.id}-${localIndex}-${activity.orderIndex}`}
+                          className="group bg-white border border-gray-200 rounded-lg p-4 hover:border-indigo-200 hover:shadow-sm transition-all"
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* Ícone do Tipo */}
+                            <div className={`w-10 h-10 rounded-lg border flex items-center justify-center ${getActivityColor(activity.type)} text-lg`}>
+                              {getActivityIcon(activity.type)}
+                            </div>
 
-                                      {activity.scoring.isRequired && (
-                                        <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full flex items-center gap-1">
-                                          <FaExclamationCircle className="w-3 h-3" />
-                                          Obrigatória
+                            {/* Conteúdo da Atividade */}
+                            <div className="flex-1 min-w-0">
+                              {/* CABEÇALHO COM TÍTULO E BOTÕES DISCRETOS */}
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-gray-800 text-sm mb-1">
+                                        {activity.title}
+                                      </h4>
+                                      <div className="flex items-center gap-3">
+                                        <span className={`text-xs px-2 py-1 rounded-full ${getActivityColor(activity.type)}`}>
+                                          {activity.type === 'quick' && 'Rápida'}
+                                          {activity.type === 'text' && 'Texto'}
+                                          {activity.type === 'quiz' && 'Quiz'}
+                                          {activity.type === 'video' && 'Vídeo'}
+                                          {activity.type === 'checklist' && 'Checklist'}
+                                          {activity.type === 'file' && 'Arquivo'}
                                         </span>
-                                      )}
+
+                                        {activity.scoring.isRequired && (
+                                          <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full flex items-center gap-1">
+                                            <FaExclamationCircle className="w-3 h-3" />
+                                            Obrigatória
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
 
-                                  {/* BOTÕES DISCRETOS - Sempre visíveis mas sutis */}
-                                  <div className="flex gap-1 ml-2">
-                                    {/* Botão Editar (Discreto) */}
-                                    <button
-                                      type="button"
-                                      onClick={() => onEditActivity(day.id, activity, index)}
-                                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                                      title="Editar atividade"
-                                    >
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                      </svg>
-                                    </button>
+                                    {/* BOTÕES DISCRETOS - Usando índices corrigidos */}
+                                    <div className="flex gap-1 ml-2">
+                                      {/* Botão Editar (Discreto) */}
+                                      <button
+                                        type="button"
+                                        onClick={() => globalIndex !== -1 && onEditActivity(day.id, activity, globalIndex)}
+                                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="Editar atividade"
+                                        disabled={globalIndex === -1}
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                      </button>
 
-                                    {/* Botão Apagar (Discreto) */}
-                                    <button
-                                      type="button"
-                                      onClick={() => onRemoveActivity(day.id, index)}
-                                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                      title="Remover atividade"
-                                    >
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                    </button>
+                                      {/* Botão Apagar (Discreto) */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (globalIndex !== -1 && window.confirm('Tem certeza que deseja remover esta atividade?')) {
+                                            onRemoveActivity(day.id, globalIndex);
+                                          }
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Remover atividade"
+                                        disabled={globalIndex === -1}
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
 
-                            {/* DESCRIÇÃO */}
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                              {activity.description || activity.instructions}
-                            </p>
+                              {/* DESCRIÇÃO */}
+                              <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                                {activity.description || activity.instructions}
+                              </p>
 
-                            {/* METADADOS */}
-                            <div className="flex items-center gap-4 text-xs text-gray-500">
-                              <div className="flex items-center gap-1">
-                                <FaClock className="w-3 h-3" />
-                                <span>{activity.metadata.estimatedDuration} min</span>
-                              </div>
+                              {/* METADADOS */}
+                              <div className="flex items-center gap-4 text-xs text-gray-500">
+                                <div className="flex items-center gap-1">
+                                  <FaClock className="w-3 h-3" />
+                                  <span>{activity.metadata.estimatedDuration} min</span>
+                                </div>
 
-                              <div className="flex items-center gap-1">
-                                <FaStar className="w-3 h-3" />
-                                <span>{activity.scoring.pointsOnCompletion} pontos</span>
-                              </div>
+                                <div className="flex items-center gap-1">
+                                  <FaStar className="w-3 h-3" />
+                                  <span>{activity.scoring.pointsOnCompletion} pontos</span>
+                                </div>
 
-                              <div className={`text-xs px-2 py-1 rounded-full ${activity.metadata.difficulty === 'easy'
-                                ? 'bg-green-100 text-green-800'
-                                : activity.metadata.difficulty === 'medium'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                                }`}>
-                                {activity.metadata.difficulty === 'easy' && 'Fácil'}
-                                {activity.metadata.difficulty === 'medium' && 'Médio'}
-                                {activity.metadata.difficulty === 'hard' && 'Difícil'}
+                                <div className={`text-xs px-2 py-1 rounded-full ${activity.metadata.difficulty === 'easy'
+                                  ? 'bg-green-100 text-green-800'
+                                  : activity.metadata.difficulty === 'medium'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                  }`}>
+                                  {activity.metadata.difficulty === 'easy' && 'Fácil'}
+                                  {activity.metadata.difficulty === 'medium' && 'Médio'}
+                                  {activity.metadata.difficulty === 'hard' && 'Difícil'}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-10">

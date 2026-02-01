@@ -118,7 +118,25 @@ export default function QuickActivityModal({
   // Inicializar com dados existentes
   useEffect(() => {
     if (initialData) {
-      setForm(initialData);
+      // ✅ CORREÇÃO: Limpar campos duplicados
+      const { estimatedDuration, pointsOnCompletion, ...cleanData } = initialData;
+
+      setForm({
+        ...cleanData,
+        config: initialData.config || {},
+        scoring: initialData.scoring || {
+          isRequired: true,
+          pointsOnCompletion: 10,
+          bonusPoints: 0
+        },
+        metadata: {
+          estimatedDuration: initialData.metadata?.estimatedDuration || 60,
+          difficulty: initialData.metadata?.difficulty || 'medium',
+          therapeuticFocus: initialData.metadata?.therapeuticFocus || [], // ✅ Garantir array vazio
+          educationalFocus: initialData.metadata?.educationalFocus || []  // ✅ Garantir array vazio
+        }
+      });
+
       setSelectedType(initialData.type);
     }
   }, [initialData]);

@@ -20,7 +20,7 @@ interface RegisterPageProps {
 
 export default function RegisterPage({ searchParams }: RegisterPageProps) {
   // Garantindo que o tipo seja válido
-  const defaultUserType = (searchParams.type === 'student' ? 'student' : 'professional') as 'student' | 'professional';
+  const defaultUserType = (searchParams.type === 'professional' ? 'professional' : 'student') as 'student' | 'professional';
   
   const isStudent = defaultUserType === 'student';
   const accentColor = isStudent ? 'text-purple-600' : 'text-indigo-600';
