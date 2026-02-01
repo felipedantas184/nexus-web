@@ -25,8 +25,7 @@ export class DateUtils {
   }
 
   static getDayOfWeek(date: Date = new Date()): number {
-    const day = date.getDay();
-    return day === 0 ? 6 : day - 1; // Convert to 0-6 (Monday-Sunday)
+    return date.getDay(); // Retorna: 0 (Domingo) a 6 (Sábado)
   }
 
   static formatDateForStorage(date: Date): string {
