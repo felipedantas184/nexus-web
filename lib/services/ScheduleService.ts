@@ -143,6 +143,13 @@ export class ScheduleService {
         return { ...schedule, activities };
       }
 
+      console.log('📦 Dados do cronograma retornados:', {
+        id: scheduleDoc.id,
+        exists: scheduleDoc.exists(),
+        data: scheduleData,
+        hasActivitiesField: 'activities' in scheduleData
+      });
+
       return schedule;
 
     } catch (error: any) {

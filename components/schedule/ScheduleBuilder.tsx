@@ -1,7 +1,7 @@
 // components/schedule/ScheduleBuilder.tsx - VERSÃO CORRIGIDA
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CreateScheduleDTO,
   CreateActivityDTO
@@ -18,6 +18,7 @@ import {
   FaListOl,
   FaCalendarCheck
 } from 'react-icons/fa';
+import { ScheduleService } from '@/lib/services/ScheduleService';
 
 interface ScheduleBuilderProps {
   onSuccess?: (scheduleId: string) => void;
@@ -46,6 +47,23 @@ export default function ScheduleBuilder({
     index: number;
   } | null>(null);
 
+  // ✅ NOVO: Estado local para garantir que initialData seja passado
+  const [effectiveInitialData, setEffectiveInitialData] = useState<Partial<CreateScheduleDTO> | undefined>(initialData);
+
+  // ✅ CRÍTICO: Sincronizar quando initialData mudar
+  useEffect(() => {
+    console.log('🔄 ScheduleBuilder: initialData atualizado', {
+      hasData: !!initialData,
+      name: initialData?.name,
+      activitiesCount: initialData?.activities?.length
+    });
+
+    if (initialData && Object.keys(initialData).length > 0) {
+      console.log('📥 ScheduleBuilder: Atualizando effectiveInitialData');
+      setEffectiveInitialData(initialData);
+    }
+  }, [initialData]);
+
   const {
     formData,
     errors,
@@ -56,8 +74,9 @@ export default function ScheduleBuilder({
     removeActivity,
     validateForm,
     submitForm,
-    hasActivities
-  } = useScheduleForm();
+    hasActivities,
+    updateExistingSchedule
+  } = useScheduleForm(effectiveInitialData); // ✅ Usar effectiveInitialData
 
   // Dias da semana configurados
   const daysOfWeek = [
@@ -149,14 +168,34 @@ export default function ScheduleBuilder({
     }
 
     try {
-      const result = await submitForm(user.id);
+      let result: string;
 
-      if (onSuccess) {
-        onSuccess(result.scheduleId);
+      if (isEditing && scheduleId) {
+        console.log('🔄 Modo edição - Atualizando cronograma:', scheduleId);
+
+        // Usar a nova função de atualização
+        result = await updateExistingSchedule(scheduleId, user.id);
+
+        if (onSuccess) {
+          onSuccess(result); // scheduleId da nova versão
+        }
+
+        alert('Cronograma atualizado com sucesso! Nova versão criada.');
+      } else {
+        console.log('🆕 Modo criação - Criando novo cronograma');
+
+        // Usar função de criação existente
+        const creationResult = await submitForm(user.id);
+        result = creationResult.scheduleId;
+
+        if (onSuccess) {
+          onSuccess(result);
+        }
+
+        alert('Cronograma criado com sucesso!');
       }
-
-      alert(isEditing ? 'Cronograma atualizado com sucesso!' : 'Cronograma criado com sucesso!');
     } catch (err: any) {
+      console.error('❌ Erro no handleSubmit:', err);
       alert(err.message || 'Erro ao salvar cronograma');
     }
   };
@@ -169,6 +208,25 @@ export default function ScheduleBuilder({
   const totalPoints = formData.activities.reduce((sum, act) =>
     sum + (act.scoring.pointsOnCompletion || 0), 0
   );
+
+  useEffect(() => {
+    console.log('🎯 ScheduleBuilder - initialData recebido:', {
+      isEditing,
+      scheduleId,
+      hasInitialData: !!initialData,
+      name: initialData?.name,
+      activitiesCount: initialData?.activities?.length,
+      activeDays: initialData?.activeDays
+    });
+  }, [initialData, isEditing, scheduleId]);
+
+  useEffect(() => {
+    console.log('📊 ScheduleBuilder - formData atual:', {
+      name: formData.name,
+      activitiesCount: formData.activities.length,
+      activeDays: formData.activeDays
+    });
+  }, [formData]);
 
   return (
     <div className="space-y-8">
@@ -193,8 +251,8 @@ export default function ScheduleBuilder({
                 type="button"
                 onClick={() => setViewMode('schedule')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'schedule'
-                    ? 'bg-white text-indigo-600 shadow'
-                    : 'text-gray-600 hover:text-gray-800'
+                  ? 'bg-white text-indigo-600 shadow'
+                  : 'text-gray-600 hover:text-gray-800'
                   }`}
               >
                 <div className="flex items-center gap-2">
@@ -206,8 +264,8 @@ export default function ScheduleBuilder({
                 type="button"
                 onClick={() => setViewMode('list')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'list'
-                    ? 'bg-white text-indigo-600 shadow'
-                    : 'text-gray-600 hover:text-gray-800'
+                  ? 'bg-white text-indigo-600 shadow'
+                  : 'text-gray-600 hover:text-gray-800'
                   }`}
               >
                 <div className="flex items-center gap-2">
@@ -219,8 +277,8 @@ export default function ScheduleBuilder({
                 type="button"
                 onClick={() => setViewMode('preview')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'preview'
-                    ? 'bg-white text-indigo-600 shadow'
-                    : 'text-gray-600 hover:text-gray-800'
+                  ? 'bg-white text-indigo-600 shadow'
+                  : 'text-gray-600 hover:text-gray-800'
                   }`}
               >
                 <div className="flex items-center gap-2">
