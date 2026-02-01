@@ -164,15 +164,15 @@ export default function HomePage() {
               className="px-10 py-4 text-lg"
             >
               <FaRocket className="w-5 h-5" />
-              Sou Profissional
+              Entrar
             </PrimaryButton>
 
             <SecondaryButton 
-              href="/student-login" 
+              href="/register" 
               className="px-10 py-4 text-lg"
             >
               <RxAvatar className="w-5 h-5" />
-              Sou Aluno
+              Criar Conta
             </SecondaryButton>
           </div>
 
