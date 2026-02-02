@@ -85,6 +85,36 @@ export default function StudentFields({
         {...register('grade', { required: 'Selecione a série/ano' })}
         disabled={loading}
       />
+
+      {/* Consentimento LGPD */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <div className="flex items-start">
+          <div className="flex items-center h-5">
+            <input
+              id="lgpd-consent"
+              type="checkbox"
+              required
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+          </div>
+          <div className="ml-3 text-sm">
+            <label htmlFor="lgpd-consent" className="font-medium text-gray-700">
+              Consentimento LGPD *
+            </label>
+            <p className="text-gray-600">
+              Concordo com o tratamento dos meus dados pessoais conforme a
+              <a href="/privacy-policy" className="text-indigo-600 hover:text-indigo-500 ml-1 underline">
+                Política de Privacidade
+              </a>
+              <span> e</span>
+              <a href="/terms" className="text-indigo-600 hover:text-indigo-500 ml-1 underline">
+                Termos de Uso
+              </a>
+              <span> da Nexus Platform. Meu CPF será criptografado e utilizado apenas para fins de identificação única.</span>
+            </p>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

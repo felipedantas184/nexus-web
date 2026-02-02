@@ -339,7 +339,7 @@ export default function HomePage() {
               Começar como Profissional
             </PrimaryButton>
 
-            <SecondaryButton href="/demo" className="px-8 py-4">
+            <SecondaryButton href="/login" className="px-8 py-4">
               <RxAvatar className="w-4.5 h-4.5" />
               Sou Aluno
             </SecondaryButton>

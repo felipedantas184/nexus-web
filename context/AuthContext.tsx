@@ -138,28 +138,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Logout com redirecionamento
   const logout = async (): Promise<void> => {
     try {
-      // 1️⃣ Remover token FCM ANTES de limpar o usuário
-      if (user?.id && messaging) {
-        try {
-          const currentToken = await getToken(messaging);
-          if (currentToken) {
-            await NotificationService.removeFCMToken(user.id, currentToken);
-          }
-        } catch (tokenError) {
-          console.warn('⚠️ Erro ao remover token FCM:', tokenError);
-        }
-      }
-
-
-      // 2️⃣ Logout do Firebase/AuthService
       await AuthService.logout();
-
-      // 3️⃣ Limpar estado local
       setUser(null);
-
-      // 4️⃣ Redirecionar
       router.push('/login');
-
     } catch (error: any) {
       console.error('❌ Erro no logout:', error);
       throw error;

@@ -51,6 +51,8 @@ export const SCHOOL_OPTIONS = [
   { value: 'bright-bee', label: 'Bright Bee' },
   { value: 'lerote', label: 'Lerote' },
   { value: 'great-school', label: 'Great School' },
+  { value: 'santa-maria-goretti', label: 'Santa Maria Goretti' },
+  { value: 'sao-jose', label: 'São José' },
 ];
 
 export const GRADE_OPTIONS = [
