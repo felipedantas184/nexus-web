@@ -146,7 +146,6 @@ export class GAD7Service {
       const status: GAD7Status = {
         studentId,
         needsAssessment: true,
-        lastCompletedWeek: undefined, // ← ADICIONAR ESTA LINHA
         lastReminder: new Date()
       };
 
