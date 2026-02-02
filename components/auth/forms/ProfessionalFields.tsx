@@ -87,15 +87,15 @@ export default function ProfessionalFields({
       licenseLabel: 'Registro Opcional',
       licensePlaceholder: 'Registro profissional (se houver)'
     },
-    {
-      value: 'coordinator',
-      icon: FaGlobeAfrica,
-      title: 'Coordenador',
-      description: 'Gestão e coordenação',
-      requiresLicense: false,
-      licenseLabel: 'Registro Opcional',
-      licensePlaceholder: 'Registro profissional (se houver)'
-    }
+    // {
+    // value: 'coordinator',
+    // icon: FaGlobeAfrica,
+    // title: 'Coordenador',
+    // description: 'Gestão e coordenação',
+    // requiresLicense: false,
+    // licenseLabel: 'Registro Opcional',
+    // licensePlaceholder: 'Registro profissional (se houver)'
+    // }
   ];
 
   const currentRole = roles.find(r => r.value === selectedRole) || roles[0];
