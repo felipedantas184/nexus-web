@@ -296,32 +296,32 @@ export default function ActivityExecutor({
           <div className="flex items-center gap-2">
             <FaClock className="text-gray-400" />
             <div>
-              <p className="text-sm text-gray-500">Duração Estimada</p>
-              <p className="font-medium">{progress.activitySnapshot.metadata.estimatedDuration} min</p>
+              <p className="text-sm text-gray-800">Duração Estimada</p>
+              <p className="font-medium text-gray-500">{progress.activitySnapshot.metadata.estimatedDuration} min</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <FaStopwatch className="text-gray-400" />
             <div>
-              <p className="text-sm text-gray-500">Tempo Gasto</p>
-              <p className="font-medium">{timeSpent} min</p>
+              <p className="text-sm text-gray-800">Tempo Gasto</p>
+              <p className="font-medium text-gray-500">{timeSpent} min</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-gray-400" />
             <div>
-              <p className="text-sm text-gray-500">Pontos</p>
-              <p className="font-medium">{progress.activitySnapshot.scoring.pointsOnCompletion}</p>
+              <p className="text-sm text-gray-800">Pontos</p>
+              <p className="font-medium text-gray-500">{progress.activitySnapshot.scoring.pointsOnCompletion}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-gray-400" />
             <div>
-              <p className="text-sm text-gray-500">Dia</p>
-              <p className="font-medium">
+              <p className="text-sm text-gray-800">Dia</p>
+              <p className="font-medium text-gray-500">
                 {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][progress.dayOfWeek]}
               </p>
             </div>

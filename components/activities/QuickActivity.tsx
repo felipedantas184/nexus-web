@@ -18,9 +18,9 @@ interface QuickActivityProps {
   onSaveDraft?: (data: any) => Promise<void>;
 }
 
-export default function QuickActivity({ 
-  activity, 
-  progress, 
+export default function QuickActivity({
+  activity,
+  progress,
   readOnly,
   onComplete,
   onSkip
@@ -40,7 +40,7 @@ export default function QuickActivity({
         setPhotoError('A foto deve ter no máximo 5MB');
         return;
       }
-      
+
       if (!file.type.startsWith('image/')) {
         setPhotoError('Por favor, selecione um arquivo de imagem');
         return;
@@ -48,7 +48,7 @@ export default function QuickActivity({
 
       setPhotoFile(file);
       setPhotoError('');
-      
+
       // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -68,13 +68,13 @@ export default function QuickActivity({
 
   const handleComplete = async () => {
     if (readOnly) return;
-    
+
     // Validação da foto obrigatória
     if (!photoFile) {
       setPhotoError('É obrigatório anexar uma foto como comprovação da atividade');
       return;
     }
-    
+
     setIsLoading(true);
     try {
       await onComplete({
@@ -92,7 +92,7 @@ export default function QuickActivity({
 
   const handleSkip = async () => {
     if (readOnly) return;
-    
+
     const reason = prompt('Por que você está pulando esta atividade? (opcional)');
     await onSkip(reason || undefined);
   };
@@ -105,7 +105,7 @@ export default function QuickActivity({
         </div>
         <h3 className="text-xl font-semibold text-gray-800 mb-2">Atividade Concluída!</h3>
         <p className="text-gray-600">Você completou esta atividade rápida.</p>
-        
+
         {notes && (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg">
             <p className="text-sm text-gray-500">Suas notas:</p>
@@ -118,28 +118,8 @@ export default function QuickActivity({
 
   return (
     <div className="space-y-6">
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-              <FaClock className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-blue-800 mb-1">Atividade Rápida</h3>
-            <p className="text-blue-700">
-              {activity.instructions}
-            </p>
-            <p className="text-sm text-blue-600 mt-2">
-              Esta é uma atividade simples que você pode completar rapidamente.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {activity.config.requiresConfirmation && (
-        <div className="space-y-6">
-          {/**
+      <div className="space-y-6">
+        {/**
           <div className="space-y-4">
             <label className="block">
               <span className="text-sm font-medium text-gray-700">Notas (opcional)</span>
@@ -157,108 +137,99 @@ export default function QuickActivity({
               Esta atividade requer confirmação de conclusão.
             </p>
           </div>
- */}
-          {/* Seção de foto obrigatória */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <FaPaperclip className="text-gray-400" />
-              <label className="text-sm font-medium text-gray-700">
-                Comprovação por foto <span className="text-red-500">*</span>
-              </label>
-            </div>
-            
-            <p className="text-sm text-gray-500">
-              Anexe uma foto como comprovação visual de que a atividade foi realizada.
-            </p>
-            
-            {photoPreview ? (
-              <div className="space-y-3">
-                <div className="relative border-2 border-dashed border-green-200 rounded-lg p-4 bg-green-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <FaCamera className="text-green-600" />
-                      <div>
-                        <p className="font-medium text-green-800">Foto anexada</p>
-                        <p className="text-sm text-green-600">{photoFile?.name}</p>
-                      </div>
+          */}
+        {/* Seção de foto obrigatória */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <FaPaperclip className="text-gray-400" />
+            <label className="text-sm font-medium text-gray-700">
+              Comprovação por foto <span className="text-red-500">*</span>
+            </label>
+          </div>
+
+          <p className="text-sm text-gray-500">
+            Anexe uma foto como comprovação visual de que a atividade foi realizada.
+          </p>
+
+          {photoPreview ? (
+            <div className="space-y-3">
+              <div className="relative border-2 border-dashed border-green-200 rounded-lg p-4 bg-green-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <FaCamera className="text-green-600" />
+                    <div>
+                      <p className="font-medium text-green-800">Foto anexada</p>
+                      <p className="text-sm text-green-600">{photoFile?.name}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleRemovePhoto}
-                      disabled={readOnly}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-full"
-                    >
-                      <FaTrash />
-                    </button>
                   </div>
-                  
-                  <div className="mt-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Pré-visualização:</p>
-                    <div className="relative h-48 rounded-lg overflow-hidden">
-                      <img 
-                        src={photoPreview} 
-                        alt="Pré-visualização da foto" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    disabled={readOnly}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-full"
+                  >
+                    <FaTrash />
+                  </button>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Pré-visualização:</p>
+                  <div className="relative h-48 rounded-lg overflow-hidden">
+                    <img
+                      src={photoPreview}
+                      alt="Pré-visualização da foto"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                photoError 
-                  ? 'border-red-300 bg-red-50' 
-                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+            </div>
+          ) : (
+            <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${photoError
+              ? 'border-red-300 bg-red-50'
+              : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
               }`}>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handlePhotoSelect}
-                  accept="image/*"
-                  className="hidden"
-                  disabled={readOnly}
-                  required
-                />
-                
-                <div className="flex flex-col items-center justify-center gap-3">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    <FaCamera className="w-6 h-6 text-blue-600" />
-                  </div>
-                  
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={readOnly}
-                      className="text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
-                    >
-                      Clique para selecionar uma foto
-                    </button>
-                    <p className="text-sm text-gray-500 mt-1">
-                      ou arraste e solte aqui
-                    </p>
-                  </div>
-                  
-                  <p className="text-xs text-gray-400">
-                    Formatos: JPG, PNG, GIF • Máx.: 5MB
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handlePhotoSelect}
+                accept="image/*"
+                className="hidden"
+                disabled={readOnly}
+                required
+              />
+
+              <div className="flex flex-col items-center justify-center gap-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <FaCamera className="w-6 h-6 text-blue-600" />
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={readOnly}
+                    className="text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                  >
+                    Clique para selecionar uma foto
+                  </button>
+                  <p className="text-sm text-gray-500 mt-1">
+                    ou arraste e solte aqui
                   </p>
                 </div>
+
+                <p className="text-xs text-gray-400">
+                  Formatos: JPG, PNG, GIF • Máx.: 5MB
+                </p>
               </div>
-            )}
-            
-            {photoError && (
-              <p className="text-sm text-red-600 mt-2">{photoError}</p>
-            )}
-            
-            <div className="flex items-center gap-2 text-sm text-gray-500 bg-yellow-50 p-3 rounded-lg">
-              <FaPaperclip className="text-yellow-500" />
-              <span>
-                <strong>Atenção:</strong> A foto é obrigatória para concluir esta atividade.
-              </span>
             </div>
-          </div>
+          )}
+
+          {photoError && (
+            <p className="text-sm text-red-600 mt-2">{photoError}</p>
+          )}
         </div>
-      )}
+      </div>
 
       {!readOnly && progress.status === 'in_progress' && (
         <div className="flex gap-3 pt-4">
@@ -269,13 +240,6 @@ export default function QuickActivity({
           >
             <FaCheck />
             {isLoading ? 'Concluindo...' : 'Marcar como Concluída'}
-          </button>
-          
-          <button
-            onClick={handleSkip}
-            className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-          >
-            Pular
           </button>
         </div>
       )}
