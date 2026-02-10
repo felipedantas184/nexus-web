@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Student } from '@/types/auth';
 import { useAuth } from '@/context/AuthContext';
+import { useStudentSchedule } from '@/hooks/useStudentSchedule';
 
 interface StudentSidebarProps {
   open: boolean;
@@ -28,16 +29,16 @@ interface StudentSidebarProps {
   className?: string;
 }
 
-export default function StudentSidebar({ 
-  open, 
+export default function StudentSidebar({
+  open,
   onNavigate,
-  className = '' 
+  className = ''
 }: StudentSidebarProps) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  
+
   if (!user || user.role !== 'student') return null;
-  
+
   const student = user as Student;
 
   const menuItems = [
@@ -56,23 +57,25 @@ export default function StudentSidebar({
     }
   };
 
-  // Simulação de dados para demonstração
-  const todayProgress = {
-    completed: 8,
-    total: 12,
-    percentage: 67
-  };
+  const {
+    todayActivities,
+    totalTodayActivities
+  } = useStudentSchedule();
+
+  const completedToday = todayActivities.filter(a => a.status === 'completed').length;
+  const completionRate = totalTodayActivities > 0 ? Math.round((completedToday / totalTodayActivities) * 100) : 0;
+
 
   return (
-    <nav 
-  className={`
+    <nav
+      className={`
     bg-gradient-to-b from-purple-800 via-purple-700 to-purple-900 w-72 h-screen p-6
     flex flex-col transition-all duration-300 ease-in-out fixed left-0 top-0 z-40
     shadow-2xl border-r border-white/10
     overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-track-purple-900/50 scrollbar-thumb-white/20
     ${open ? 'translate-x-0' : '-translate-x-full'} ${className}
   `}
->
+    >
       <div className="flex-1 flex flex-col">
         {/* User Header */}
         <div className="flex items-center gap-4 p-5 bg-white/12 rounded-2xl mb-6 border border-white/20 backdrop-blur-md">
@@ -81,7 +84,7 @@ export default function StudentSidebar({
               {student.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
             </span>
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <div className="font-bold text-white text-base mb-1 truncate">
               {student.name}
@@ -120,14 +123,14 @@ export default function StudentSidebar({
                 onClick={onNavigate}
                 className={`
                   flex items-center gap-4 p-4 rounded-xl transition-all duration-300 relative
-                  ${isActive(item.href) 
-                    ? 'bg-white/20 text-white border-l-4 border-purple-300 shadow-lg' 
+                  ${isActive(item.href)
+                    ? 'bg-white/20 text-white border-l-4 border-purple-300 shadow-lg'
                     : 'text-white/85 hover:bg-white/10 hover:text-white'
                   }
                   group-hover:translate-x-1
                 `}
               >
-                <div 
+                <div
                   className={`
                     w-6 h-6 flex items-center justify-center
                     ${isActive(item.href) ? 'text-purple-300' : 'text-white/70'}
@@ -135,7 +138,7 @@ export default function StudentSidebar({
                 >
                   <item.icon className="w-5 h-5" />
                 </div>
-                
+
                 <span className="font-medium text-sm">
                   {item.label}
                 </span>
@@ -151,24 +154,24 @@ export default function StudentSidebar({
               Progresso Hoje
             </h4>
             <span className="text-xs font-medium text-white">
-              {todayProgress.completed}/{todayProgress.total}
+              {completedToday}/{totalTodayActivities}
             </span>
           </div>
-          
+
           <div className="w-full h-2 bg-white/25 rounded-full overflow-hidden mb-3">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
-              style={{ width: `${todayProgress.percentage}%` }}
+              style={{ width: `${completionRate == 0 ? '100' : completionRate}%` }}
             />
           </div>
-          
+
           <div className="flex items-center justify-between">
             <div className="text-xs text-white/75">
-              {todayProgress.completed} de {todayProgress.total} atividades
+              {completedToday} de {totalTodayActivities} atividades
             </div>
             <div className="flex items-center gap-1 text-xs font-medium text-emerald-300">
               <FaCheckCircle className="w-3 h-3" />
-              <span>{todayProgress.percentage}%</span>
+              <span>{completionRate == 0 ? '100' : completionRate}%</span>
             </div>
           </div>
         </div>
