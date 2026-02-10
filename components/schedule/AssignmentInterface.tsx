@@ -31,6 +31,7 @@ import {
 } from 'react-icons/fa';
 import { TbFilter } from 'react-icons/tb';
 import { useAuth } from '@/context/AuthContext';
+import { StudentService } from '@/lib/services/StudentService';
 
 interface StudentWithStatus extends Student {
   hasActiveInstance?: boolean;
@@ -110,31 +111,59 @@ export default function AssignmentInterface({
   };
 
   // Na linha ~160 do componente, ajuste a função de normalização:
-  const normalizeStudents = (students: Student[]): StudentWithStatus[] => {
-    return students.map(student => {
-      const isAssigned = isCoordinator
-        ? true
-        : student.profile.assignedProfessionals?.includes(user?.id || '') || false;
-      const engagementScore = calculateEngagementScore(student);
+  const normalizeStudents = async (students: Student[]): Promise<StudentWithStatus[]> => {
+    console.log('🔄 Normalizando lista de alunos:', students.length, 'alunos');
 
-      // Coordenador pode selecionar TODOS
-      // Profissional só pode selecionar SE estiver atribuído a ele
-      const canBeSelected = isCoordinator || isAssigned;
+    const normalized = await Promise.all(
+      students.map(async (student) => {
+        // Verificar se já tem cronograma ativo
+        let hasActiveInstance = false;
+        if (schedule?.id) {
+          console.log(`🔍 Verificando cronograma para aluno ${student.name} (${student.id})`);
+          hasActiveInstance = await StudentService.hasActiveSchedule(
+            student.id,
+            schedule.id
+          );
 
-      return {
-        ...student,
-        hasActiveInstance: false,
-        canReceiveSchedule: true,
-        isAssignedToMe: isAssigned,
-        canBeSelected, // ← NOVA PROPRIEDADE
-        engagementScore,
-        stats: {
-          totalPoints: student.profile.totalPoints ?? 0,
-          streak: student.profile.streak ?? 0,
-          level: student.profile.level ?? 1
+          if (hasActiveInstance) {
+            console.log(`⚠️  ALUNO JÁ TEM CRONOGRAMA ATIVO: ${student.name} (${student.id})`);
+            console.log(`   Cronograma ID: ${schedule.id} | Nome: ${schedule.name}`);
+          }
         }
-      };
-    });
+
+        const isAssigned = isCoordinator
+          ? true
+          : student.profile.assignedProfessionals?.includes(user?.id || '') || false;
+        const engagementScore = calculateEngagementScore(student);
+
+        const canBeSelected = isCoordinator || isAssigned;
+        const canReceiveSchedule = !hasActiveInstance;
+
+        return {
+          ...student,
+          hasActiveInstance,
+          canReceiveSchedule,
+          isAssignedToMe: isAssigned,
+          canBeSelected,
+          engagementScore,
+          stats: {
+            totalPoints: student.profile.totalPoints ?? 0,
+            streak: student.profile.streak ?? 0,
+            level: student.profile.level ?? 1
+          }
+        };
+      })
+    );
+
+    // Contar alunos com cronograma ativo
+    const alunosComCronograma = normalized.filter(s => s.hasActiveInstance);
+    console.log('📊 RESUMO DA NORMALIZAÇÃO:');
+    console.log(`   • Total de alunos: ${normalized.length}`);
+    console.log(`   • Alunos com cronograma ativo: ${alunosComCronograma.length}`);
+    console.log(`   • IDs dos alunos com cronograma ativo:`,
+      alunosComCronograma.map(s => ({ id: s.id, name: s.name })));
+
+    return normalized;
   };
 
   // Carregar dados iniciais
@@ -143,12 +172,19 @@ export default function AssignmentInterface({
       try {
         setLoading(true);
         setError(null);
+
+        console.log('🚀 Iniciando carregamento de dados...');
+        console.log(`📅 Schedule ID: ${scheduleId}`);
+
         await Promise.all([
           loadScheduleData(scheduleId),
           loadStudents()
         ]);
+
+        console.log('✅ Dados carregados com sucesso');
+
       } catch (err: any) {
-        console.error('Erro ao inicializar:', err);
+        console.error('❌ Erro ao inicializar:', err);
         setError(err.message || 'Erro ao carregar dados');
       } finally {
         setLoading(false);
@@ -169,50 +205,86 @@ export default function AssignmentInterface({
 
   // Aplicar filtros
   useEffect(() => {
-    const normalized = normalizeStudents(students);
-    let filtered = [...normalized];
+    const applyFilters = async () => {
+      console.log('🎯 Aplicando filtros...');
+      console.log('Filtros atuais:', filters);
 
-    // Busca
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(student =>
-        student.name.toLowerCase().includes(searchLower) ||
-        student.email.toLowerCase().includes(searchLower) ||
-        student.profile.school.toLowerCase().includes(searchLower)
-      );
-    }
+      const normalized = await normalizeStudents(students);
+      let filtered = [...normalized];
 
-    // Filtros adicionais
-    if (filters.grade !== 'all') {
-      filtered = filtered.filter(student => student.profile.grade === filters.grade);
-    }
-    if (filters.school !== 'all') {
-      filtered = filtered.filter(student => student.profile.school === filters.school);
-    }
-    if (filters.engagement !== 'all') {
-      filtered = filtered.filter(student => {
-        const score = student.engagementScore || 0;
-        if (filters.engagement === 'low') return score < 40;
-        if (filters.engagement === 'medium') return score >= 40 && score < 70;
-        if (filters.engagement === 'high') return score >= 70;
-        return true;
-      });
-    }
-    if (!isCoordinator && filters.assignment !== 'all') {
-      if (filters.assignment === 'assigned') {
-        filtered = filtered.filter(student => student.isAssignedToMe);
-      } else if (filters.assignment === 'unassigned') {
-        filtered = filtered.filter(student => !student.isAssignedToMe);
+      // Busca
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        filtered = filtered.filter(student =>
+          student.name.toLowerCase().includes(searchLower) ||
+          student.email.toLowerCase().includes(searchLower) ||
+          student.profile.school.toLowerCase().includes(searchLower)
+        );
+        console.log(`🔎 Após busca "${filters.search}": ${filtered.length} alunos`);
       }
-    }
 
-    setFilteredStudents(filtered);
-  }, [students, filters, isCoordinator]);
+      // Filtros adicionais
+      if (filters.grade !== 'all') {
+        filtered = filtered.filter(student => student.profile.grade === filters.grade);
+        console.log(`📚 Após filtro série "${filters.grade}": ${filtered.length} alunos`);
+      }
+      if (filters.school !== 'all') {
+        filtered = filtered.filter(student => student.profile.school === filters.school);
+        console.log(`🏫 Após filtro escola "${filters.school}": ${filtered.length} alunos`);
+      }
+      if (filters.engagement !== 'all') {
+        filtered = filtered.filter(student => {
+          const score = student.engagementScore || 0;
+          if (filters.engagement === 'low') return score < 40;
+          if (filters.engagement === 'medium') return score >= 40 && score < 70;
+          if (filters.engagement === 'high') return score >= 70;
+          return true;
+        });
+        console.log(`🔥 Após filtro engajamento "${filters.engagement}": ${filtered.length} alunos`);
+      }
+      if (!isCoordinator && filters.assignment !== 'all') {
+        if (filters.assignment === 'assigned') {
+          filtered = filtered.filter(student => student.isAssignedToMe);
+          console.log(`👤 Após filtro "meus alunos": ${filtered.length} alunos`);
+        } else if (filters.assignment === 'unassigned') {
+          filtered = filtered.filter(student => !student.isAssignedToMe);
+          console.log(`👥 Após filtro "não atribuídos": ${filtered.length} alunos`);
+        }
+      }
+
+      // Verificar status final dos alunos filtrados
+      const alunosBloqueados = filtered.filter(s => !s.canReceiveSchedule);
+      const alunosSelecionaveis = filtered.filter(s => s.canReceiveSchedule);
+
+      console.log('📊 RESUMO FINAL DOS FILTROS:');
+      console.log(`   • Alunos filtrados: ${filtered.length}`);
+      console.log(`   • Alunos selecionáveis (sem cronograma ativo): ${alunosSelecionaveis.length}`);
+      console.log(`   • Alunos bloqueados (com cronograma ativo): ${alunosBloqueados.length}`);
+
+      if (alunosBloqueados.length > 0) {
+        console.log('🚫 ALUNOS BLOQUEADOS (com cronograma ativo):');
+        alunosBloqueados.forEach(aluno => {
+          console.log(`   • ${aluno.name} (${aluno.id})`);
+        });
+      }
+
+      setFilteredStudents(filtered);
+    };
+
+    if (students.length > 0 && schedule?.id) {
+      applyFilters();
+    }
+  }, [students, filters, isCoordinator, schedule?.id]);
 
   // Funções de manipulação (mantidas iguais)
   const handleStudentSelect = (studentId: string) => {
     const student = filteredStudents.find(s => s.id === studentId);
     if (!student) return;
+
+    if (student.hasActiveInstance) {
+      setError(`Aluno "${student.name}" já possui este cronograma ativo`);
+      return;
+    }
 
     // Verificação mais clara:
     if (!isCoordinator && !student.isAssignedToMe) {
@@ -752,7 +824,7 @@ export default function AssignmentInterface({
                         </div>
                       </div>
                     )}
-                    
+
                     {/* MENSAGEM DE ALERTA (apenas para profissionais quando aluno não está atribuído) */}
                     {!isCoordinator && !student.isAssignedToMe && (
                       <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">

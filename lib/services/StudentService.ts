@@ -480,10 +480,9 @@ export class StudentService {
   /**
    * Verifica se aluno já tem cronograma ativo
    */
-  static async hasActiveSchedule(
-    studentId: string,
-    scheduleTemplateId: string
-  ): Promise<boolean> {
+  static async hasActiveSchedule(studentId: string, scheduleTemplateId: string): Promise<boolean> {
+    console.log(`📋 [hasActiveSchedule] Verificando aluno ${studentId} no cronograma ${scheduleTemplateId}`);
+
     try {
       const q = query(
         collection(firestore, 'scheduleInstances'),
@@ -494,9 +493,22 @@ export class StudentService {
       );
 
       const snapshot = await getDocs(q);
-      return !snapshot.empty;
+
+      const temAtivo = !snapshot.empty;
+      console.log(`   Resultado: ${temAtivo ? 'TEM cronograma ativo' : 'NÃO tem cronograma ativo'}`);
+
+      if (temAtivo && snapshot.docs.length > 0) {
+        console.log(`   Detalhes da instância ativa:`);
+        snapshot.docs.forEach(doc => {
+          console.log(`     • Instância ID: ${doc.id}`);
+          console.log(`     • Status: ${doc.data().status}`);
+          console.log(`     • Data início: ${doc.data().startedAt?.toDate()}`);
+        });
+      }
+
+      return temAtivo;
     } catch (error) {
-      console.error('Erro ao verificar cronograma ativo:', error);
+      console.error(`❌ Erro ao verificar cronograma ativo para aluno ${studentId}:`, error);
       return false;
     }
   }
