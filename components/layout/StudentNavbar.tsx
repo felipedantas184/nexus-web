@@ -1,16 +1,18 @@
 // components/layout/StudentNavbar.tsx
+// components/layout/StudentNavbar.tsx
 'use client';
 
 import { useState } from 'react';
-import { 
-  FaBars, 
-  FaSignOutAlt, 
-  FaBell, 
-  FaHome, 
+import {
+  FaBars,
+  FaSignOutAlt,
+  FaBell,
+  FaHome,
   FaTrophy,
   FaBrain,
   FaQuestionCircle,
-  FaSearch
+  FaSearch,
+  FaTimes // Adicione este ícone
 } from 'react-icons/fa';
 import { FaRankingStar } from 'react-icons/fa6';
 import Link from 'next/link';
@@ -20,19 +22,21 @@ import { Student } from '@/types/auth';
 
 interface StudentNavbarProps {
   toggleSidebar: () => void;
-  sidebarCollapsed?: boolean;
+  sidebarOpen: boolean; // Mudamos de sidebarCollapsed para sidebarOpen
+  isMobile: boolean;
 }
 
-export default function StudentNavbar({ 
-  toggleSidebar, 
-  sidebarCollapsed = false 
+export default function StudentNavbar({
+  toggleSidebar,
+  sidebarOpen,
+  isMobile
 }: StudentNavbarProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [showNotifications, setShowNotifications] = useState(false);
 
   if (!user || user.role !== 'student') return null;
-  
+
   const student = user as Student;
 
   const handleLogout = async () => {
@@ -56,22 +60,33 @@ export default function StudentNavbar({
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="sticky top-0 z-40 bg-gradient-to-r from-purple-700 via-purple-600 to-purple-700 h-16 shadow-lg shadow-purple-900/20 border-b border-white/10">
+    <header className="sticky top-0 z-20 bg-gradient-to-r from-purple-700 via-purple-600 to-purple-700 h-16 shadow-lg shadow-purple-900/20 border-b border-white/10">
       <div className="w-full h-full px-4 md:px-6 flex items-center justify-between">
         {/* Left Section */}
         <div className="flex items-center gap-3 md:gap-4">
-          {/* Sidebar Toggle */}
+          {/* Sidebar Toggle - diferente para mobile/desktop */}
           <button
             onClick={toggleSidebar}
-            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-            className="p-2 rounded-xl bg-white/15 text-white hover:bg-white/25 transition-all duration-200 hover:scale-105 active:scale-95"
+            title={sidebarOpen ? "Fechar menu" : "Abrir menu"}
+            className={`
+              p-2 rounded-xl transition-all duration-200 
+              hover:scale-105 active:scale-95
+              ${isMobile
+                ? 'bg-white/20 text-white hover:bg-white/30'
+                : 'bg-white/15 text-white hover:bg-white/25'
+              }
+            `}
           >
-            <FaBars className="w-5 h-5" />
+            {isMobile && sidebarOpen ? (
+              <FaTimes className="w-5 h-5" />
+            ) : (
+              <FaBars className="w-5 h-5" />
+            )}
           </button>
-          
+
           {/* Logo/Brand */}
-          <Link 
-            href="/student/dashboard" 
+          <Link
+            href="/student/dashboard"
             className="flex items-center gap-3 transition-opacity hover:opacity-90 active:opacity-80"
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -82,7 +97,7 @@ export default function StudentNavbar({
               <div className="text-xs text-purple-200 font-semibold">Student</div>
             </div>
           </Link>
-          
+
           {/* Student Badge */}
           <div className="hidden lg:inline-block px-3 py-1.5 bg-white/20 text-white text-xs font-semibold rounded-full border border-white/30">
             Área do Aluno
@@ -109,7 +124,7 @@ export default function StudentNavbar({
 
           {/* Notifications */}
           <div className="relative">
-            <button 
+            <button
               className="p-2 rounded-lg bg-white/10 text-white/80 hover:bg-white/20 hover:text-white 
                        transition-all duration-200 hover:-translate-y-0.5 relative"
               onClick={() => setShowNotifications(!showNotifications)}
@@ -126,8 +141,8 @@ export default function StudentNavbar({
             {/* Notifications Dropdown */}
             {showNotifications && (
               <>
-                <div 
-                  className="fixed inset-0 z-10" 
+                <div
+                  className="fixed inset-0 z-10"
                   onClick={() => setShowNotifications(false)}
                 />
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-20 overflow-hidden animate-fade-in">
@@ -137,14 +152,14 @@ export default function StudentNavbar({
                       <span className="text-xs text-gray-500">{notifications.length} total</span>
                     </div>
                   </div>
-                  
+
                   <div className="max-h-96 overflow-y-auto">
                     {notifications.map(notification => (
-                      <div 
+                      <div
                         key={notification.id}
                         className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer
                                   ${!notification.read ? 'bg-blue-50/50' : ''}`}
-                        onClick={() => {/* Marcar como lida */}}
+                        onClick={() => {/* Marcar como lida */ }}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -158,7 +173,7 @@ export default function StudentNavbar({
                       </div>
                     ))}
                   </div>
-                  
+
                   <div className="p-3 border-t border-gray-100">
                     <Link
                       href="/student/notifications"
