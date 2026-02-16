@@ -14,7 +14,6 @@ export default function StudentLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Detectar se é mobile
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024);
@@ -25,6 +24,31 @@ export default function StudentLayout({
 
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // ✅ TRAVAR SCROLL DO BODY quando sidebar está aberta no mobile
+  useEffect(() => {
+    if (isMobile && sidebarOpen) {
+      // Salva o scroll position atual
+      const scrollY = window.scrollY;
+      
+      // Adiciona classes para travar o body
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflowY = 'scroll'; // Mantém a scrollbar visível
+      
+      // Cleanup function
+      return () => {
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflowY = '';
+        
+        // Restaura o scroll position
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isMobile, sidebarOpen]);
 
   // Fechar sidebar ao redimensionar para desktop
   useEffect(() => {
@@ -49,6 +73,7 @@ export default function StudentLayout({
           flex-1 flex flex-col min-h-screen
           transition-all duration-300 ease-in-out
           ${sidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}
+          ${isMobile && sidebarOpen ? 'overflow-hidden h-screen' : ''}
         `}>
           {/* Navbar */}
           <StudentNavbar
