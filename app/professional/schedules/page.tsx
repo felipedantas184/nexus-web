@@ -4,10 +4,10 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useSchedules } from '@/hooks/useSchedules';
-import { 
-  FaPlus, 
-  FaCalendarAlt, 
-  FaEdit, 
+import {
+  FaPlus,
+  FaCalendarAlt,
+  FaEdit,
   FaUsers,
   FaChartLine,
   FaArchive,
@@ -40,7 +40,7 @@ export default function SchedulesPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'activities'>('date');
-  
+
   const { schedules, loading, error, archiveSchedule, refresh } = useSchedules({
     activeOnly: filter === 'active',
     limit: 50
@@ -52,16 +52,16 @@ export default function SchedulesPage() {
       // Filtro por status
       if (filter === 'active' && !schedule.isActive) return false;
       if (filter === 'archived' && schedule.isActive) return false;
-      
+
       // Filtro por categoria
       if (categoryFilter !== 'all' && schedule.category !== categoryFilter) return false;
-      
+
       // Filtro por busca
       if (search && !schedule.name.toLowerCase().includes(search.toLowerCase()) &&
-          !schedule.description?.toLowerCase().includes(search.toLowerCase())) {
+        !schedule.description?.toLowerCase().includes(search.toLowerCase())) {
         return false;
       }
-      
+
       return true;
     })
     .sort((a, b) => {
@@ -185,7 +185,7 @@ export default function SchedulesPage() {
                 <p className="text-gray-600">Gerencie e organize seus programas terapêuticos e educacionais</p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <Link
                 href="/professional/schedules/new"
@@ -210,7 +210,7 @@ export default function SchedulesPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-gradient-to-br from-white to-amber-50 rounded-2xl border border-amber-200 p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -222,7 +222,7 @@ export default function SchedulesPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl border border-purple-200 p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -234,7 +234,7 @@ export default function SchedulesPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-gradient-to-br from-white to-indigo-50 rounded-2xl border border-indigo-200 p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -333,7 +333,7 @@ export default function SchedulesPage() {
                 </button>
               </div>
             )}
-            
+
             {filter !== 'all' && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 text-sm rounded-full border border-emerald-200">
                 <span>Status: {filter === 'active' ? 'Ativos' : 'Arquivados'}</span>
@@ -342,7 +342,7 @@ export default function SchedulesPage() {
                 </button>
               </div>
             )}
-            
+
             {categoryFilter !== 'all' && (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-700 text-sm rounded-full border border-purple-200">
                 <span>Categoria: {getCategoryLabel(categoryFilter)}</span>
@@ -398,11 +398,10 @@ export default function SchedulesPage() {
                     <div className="p-6 bg-gradient-to-r from-gray-50 to-white">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-start gap-4">
-                          <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${
-                            schedule.category === 'therapeutic' ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
-                            schedule.category === 'educational' ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' :
-                            'bg-gradient-to-br from-purple-500 to-purple-600'
-                          }`}>
+                          <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${schedule.category === 'therapeutic' ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
+                              schedule.category === 'educational' ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' :
+                                'bg-gradient-to-br from-purple-500 to-purple-600'
+                            }`}>
                             {getCategoryIcon(schedule.category)}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -414,33 +413,33 @@ export default function SchedulesPage() {
                                 {getCategoryLabel(schedule.category)}
                               </span>
                             </div>
-                            
+
                             {schedule.description && (
                               <p className="text-gray-600 text-sm mb-4 line-clamp-2">
                                 {schedule.description}
                               </p>
                             )}
-                            
+
                             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                               <div className="flex items-center gap-2">
                                 <FaClock className="w-3.5 h-3.5 text-gray-400" />
                                 <span>Criado em {new Date(schedule.createdAt).toLocaleDateString('pt-BR')}</span>
                               </div>
-                              
+
                               <div className="flex items-center gap-1">
                                 <FaListOl className="w-3 h-3 text-gray-400" />
                                 <span>{schedule.metadata.totalActivities || 0} atividades</span>
                               </div>
-                              
+
                               <div className="flex items-center gap-1">
                                 <FaRegCalendarAlt className="w-3 h-3 text-gray-400" />
-                                <span>{schedule.activeDays.length} dias/semana</span>
+                                <span>{new Date(schedule.endDate).toLocaleDateString('pt-BR')}</span>
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Status e Metadados */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -455,12 +454,12 @@ export default function SchedulesPage() {
                               <span>Ativo</span>
                             </div>
                           )}
-                          
+
                           <div className="text-sm text-gray-500">
                             {schedule.metadata.estimatedWeeklyHours}h/semana
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           {/* Tags do cronograma */}
                           {schedule.metadata.tags && schedule.metadata.tags.slice(0, 2).map((tag, index) => (
@@ -471,7 +470,7 @@ export default function SchedulesPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Ações do Cronograma */}
                     <div className="bg-gray-50 p-4 border-t border-gray-200">
                       <div className="flex items-center justify-between">
@@ -484,17 +483,25 @@ export default function SchedulesPage() {
                             <FaEye className="w-3.5 h-3.5" />
                             <span>Ver</span>
                           </Link>
-                          
+
                           <Link
                             href={`/professional/schedules/${schedule.id}/assign`}
-                            className="px-4 py-2 bg-white text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors flex items-center gap-2 text-sm font-medium"
-                            title="Atribuir a alunos"
+                            className={`px-4 py-2 bg-white border rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${new Date() > new Date(schedule.endDate)
+                                ? 'text-gray-400 border-gray-200 cursor-not-allowed pointer-events-none opacity-50'
+                                : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'
+                              }`}
+                            title={new Date() > new Date(schedule.endDate) ? 'Cronograma expirado' : 'Atribuir a alunos'}
+                            aria-disabled={new Date() > new Date(schedule.endDate)}
+                            {...(new Date() > new Date(schedule.endDate) && {
+                              onClick: (e) => e.preventDefault(),
+                              tabIndex: -1
+                            })}
                           >
                             <FaUserFriends className="w-3.5 h-3.5" />
                             <span>Atribuir</span>
                           </Link>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           <button disabled // COMENTADO
                             onClick={() => handleArchive(schedule.id, schedule.name)}
@@ -503,14 +510,14 @@ export default function SchedulesPage() {
                           >
                             <FaArchive className="w-4 h-4" />
                           </button>
-                          
+
                           <button disabled // COMENTADO
                             className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                             title="Duplicar"
                           >
                             <FaCopy className="w-4 h-4" />
                           </button>
-                          
+
                           <button disabled // COMENTADO
                             className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                             title="Compartilhar"
@@ -533,7 +540,7 @@ export default function SchedulesPage() {
                 <div className="text-sm text-gray-500">
                   Mostrando {Math.min(filteredSchedules.length, 10)} de {filteredSchedules.length} cronogramas
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                   <button
                     className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
@@ -544,11 +551,11 @@ export default function SchedulesPage() {
                     </svg>
                     <span>Anterior</span>
                   </button>
-                  
+
                   <div className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium">
                     1
                   </div>
-                  
+
                   <button
                     className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
                     disabled
