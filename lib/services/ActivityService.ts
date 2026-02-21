@@ -180,7 +180,8 @@ export class ActivityService {
       'quiz': 'Quiz',
       'video': 'Vídeo',
       'checklist': 'Checklist',
-      'file': 'Arquivo'
+      'file': 'Arquivo',
+      'app': 'App'
     };
 
     const difficultyLabels: Record<string, string> = {
