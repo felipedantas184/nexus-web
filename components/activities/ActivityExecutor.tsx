@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ActivityProgress, ActivityType, ChecklistActivityConfig, FileActivityConfig, ProgressStatus, QuickActivityConfig, QuizActivityConfig, ScheduleActivity, TextActivityConfig, VideoActivityConfig } from '@/types/schedule';
+import { ActivityProgress, ActivityType, AppActivityConfig, ChecklistActivityConfig, FileActivityConfig, ProgressStatus, QuickActivityConfig, QuizActivityConfig, ScheduleActivity, TextActivityConfig, VideoActivityConfig } from '@/types/schedule';
 import QuickActivity from './QuickActivity';
 import TextActivity from './TextActivity';
 import QuizActivity from './QuizActivity';
@@ -13,6 +13,7 @@ import EmotionalStateModal from './EmotionalStateModal';
 import { ProgressService } from '@/lib/services/ProgressService';
 import { FaClock, FaCheck, FaPlay, FaPause, FaStopwatch } from 'react-icons/fa';
 import { DebugUtils } from '@/lib/utils/debugUtils';
+import AppActivity from './AppActivity';
 
 interface ActivityExecutorProps {
   progress: ActivityProgress;
@@ -196,34 +197,16 @@ export default function ActivityExecutor({
           activity={activity as ScheduleActivity & { config: QuickActivityConfig }}
         />;
 
-      case 'text':
-        return <TextActivity
-          {...commonProps}
-          activity={activity as ScheduleActivity & { config: TextActivityConfig }}
-        />;
-
-      case 'quiz':
-        return <QuizActivity
-          {...commonProps}
-          activity={activity as ScheduleActivity & { config: QuizActivityConfig }}
-        />;
-
-      case 'video':
-        return <VideoActivity
-          {...commonProps}
-          activity={activity as ScheduleActivity & { config: VideoActivityConfig }}
-        />;
-
-      case 'checklist':
-        return <ChecklistActivity
-          {...commonProps}
-          activity={activity as ScheduleActivity & { config: ChecklistActivityConfig }}
-        />;
-
       case 'file':
         return <FileActivity
           {...commonProps}
           activity={activity as ScheduleActivity & { config: FileActivityConfig }}
+        />;
+
+      case 'app':
+        return <AppActivity
+          {...commonProps}
+          activity={activity as ScheduleActivity & { config: AppActivityConfig }}
         />;
 
       default:

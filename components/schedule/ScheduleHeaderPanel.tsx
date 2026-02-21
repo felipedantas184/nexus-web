@@ -63,6 +63,35 @@ export default function ScheduleHeaderPanel({
     updateField('activeDays', newDays.sort());
   };
 
+  // Função para calcular o domingo subsequente a uma data
+  const getNextSunday = (date: Date): Date => {
+    const result = new Date(date);
+    const dayOfWeek = result.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+    
+    if (dayOfWeek === 0) {
+      // Se já é domingo, retorna a própria data
+      return result;
+    } else {
+      // Calcula quantos dias faltam para o próximo domingo
+      const daysUntilSunday = 7 - dayOfWeek;
+      result.setDate(result.getDate() + daysUntilSunday);
+      return result;
+    }
+  };
+
+  // Handler para mudança da data de início
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const [year, month, day] = e.target.value.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day);
+    
+    // Atualiza a data de início
+    updateField('startDate', localDate);
+    
+    // Calcula e atualiza automaticamente a data de término para o domingo subsequente
+    const nextSunday = getNextSunday(localDate);
+    updateField('endDate', nextSunday);
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Cabeçalho com Estatísticas */}
@@ -160,7 +189,7 @@ export default function ScheduleHeaderPanel({
                   >
                     <div className="text-center">
                       <div className={`font-medium text-sm ${formData.category === category.value
-                        ? 'text-indigo-600'
+                        ? 'text-white-600'
                         : 'text-gray-700'
                         }`}>
                         {category.label}
@@ -185,11 +214,7 @@ export default function ScheduleHeaderPanel({
               <input
                 type="date"
                 value={formData.startDate.toISOString().split('T')[0]}
-                onChange={(e) => {
-                  const [year, month, day] = e.target.value.split('-').map(Number);
-                  const localDate = new Date(year, month - 1, day);
-                  updateField('startDate', localDate);
-                }}
+                onChange={handleStartDateChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 text-gray-900"
                 min={new Date().toLocaleDateString('en-CA')}
               />
@@ -206,29 +231,16 @@ export default function ScheduleHeaderPanel({
               <input
                 type="date"
                 value={formData.endDate ? formData.endDate.toISOString().split('T')[0] : ''}
-                onChange={(e) => {
-                  const [year, month, day] = e.target.value.split('-').map(Number);
-                  const localDate = new Date(year, month - 1, day);
-
-                  // Validação: data de término não pode ser anterior à data de início
-                  if (localDate < formData.startDate) {
-                    alert('Data de término não pode ser anterior à data de início');
-                    return;
-                  }
-
-                  updateField('endDate', localDate);
-                }}
-                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400 text-gray-900
+                readOnly
+                className={`w-full px-4 py-3 border rounded-xl bg-gray-50 cursor-not-allowed text-gray-600
       ${errors.endDate ? 'border-red-500' : 'border-gray-300'}`}
-                min={formData.startDate.toISOString().split('T')[0]}
-                required
               />
               {errors.endDate && (
                 <p className="mt-1 text-sm text-red-600">{errors.endDate}</p>
               )}
               <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                 <FaInfoCircle className="w-3 h-3" />
-                O cronograma será executado até esta data
+                Data definida automaticamente para o domingo subsequente à data de início
               </div>
             </div>
           </div>

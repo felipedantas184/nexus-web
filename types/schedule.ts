@@ -1,6 +1,6 @@
 // types/schedule.ts
 export type ScheduleCategory = 'therapeutic' | 'educational' | 'mixed';
-export type ActivityType = 'quick' | 'text' | 'quiz' | 'video' | 'checklist' | 'file';
+export type ActivityType = 'quick' | 'text' | 'quiz' | 'video' | 'checklist' | 'file' | 'app';
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 export type ScheduleStatus = 'draft' | 'active' | 'archived';
 export type InstanceStatus = 'active' | 'paused' | 'completed' | 'overdue';
@@ -15,6 +15,11 @@ export interface BaseModel {
 
 // Configurações específicas por tipo de atividade
 export interface QuickActivityConfig {
+  requiresConfirmation?: boolean;
+  autoComplete?: boolean;
+}
+
+export interface AppActivityConfig {
   requiresConfirmation?: boolean;
   autoComplete?: boolean;
 }
@@ -64,7 +69,8 @@ export type ActivityConfig =
   | QuizActivityConfig
   | VideoActivityConfig
   | ChecklistActivityConfig
-  | FileActivityConfig;
+  | FileActivityConfig
+  | AppActivityConfig; 
 
 // MODELOS PRINCIPAIS
 export interface ScheduleTemplate extends BaseModel {

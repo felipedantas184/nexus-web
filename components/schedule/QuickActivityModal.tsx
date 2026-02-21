@@ -52,6 +52,13 @@ const activityTypes: Array<{
       description: 'Atividade simples sem detalhes'
     },
     {
+      type: 'app',
+      icon: '📱',
+      label: 'App',
+      color: 'bg-purple-500',
+      description: 'Atividade em aplicativo externo'
+    },
+    {
       type: 'file',
       icon: <FaFile />,
       label: 'Arquivo',
@@ -91,7 +98,7 @@ export default function QuickActivityModal({
     title: '',
     description: '',
     instructions: '',
-    type: 'text',
+    type: 'quick',
     dayOfWeek: initialDay,
     orderIndex: 0,
     config: {},
@@ -196,34 +203,14 @@ export default function QuickActivityModal({
 
   const getConfigForType = (): ActivityConfig => {
     switch (selectedType) {
-      case 'text':
-        return {
-          minWords: 50,
-          maxWords: 500,
-          format: 'plain'
-        };
-      case 'video':
-        return {
-          url: '',
-          provider: 'youtube'
-        };
-      case 'checklist':
-        return {
-          items: checklistItems.map((item, idx) => ({
-            id: `item-${Date.now()}-${idx}`,
-            label: item,
-            required: true
-          }))
-        };
-      case 'quiz':
-        return {
-          questions: [],
-          passingScore: 70
-        };
       case 'file':
         return {
           allowedTypes: ['.pdf', '.doc', '.docx', '.jpg', '.png'],
           maxSizeMB: 10
+        };
+      case 'app':
+        return {
+          autoComplete: true,
         };
       default:
         return {
@@ -545,48 +532,6 @@ export default function QuickActivityModal({
             </div>
 
             {/* Seção 4: Configurações Específicas */}
-            {selectedType === 'checklist' && (
-              <div className="space-y-4">
-                <label className="block text-sm font-medium text-gray-700">
-                  Itens da Checklist *
-                </label>
-                {checklistItems.map((item, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-600">
-                        {index + 1}
-                      </span>
-                    </div>
-                    <input
-                      type="text"
-                      value={item}
-                      onChange={(e) => updateChecklistItem(index, e.target.value)}
-                      className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg"
-                      placeholder={`Item ${index + 1}...`}
-                      required
-                    />
-                    {checklistItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeChecklistItem(index)}
-                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
-                      >
-                        <FaTrash className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addChecklistItem}
-                  className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium"
-                >
-                  <FaPlus className="w-4 h-4" />
-                  Adicionar Item
-                </button>
-              </div>
-            )}
-
             {selectedType === 'file' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
