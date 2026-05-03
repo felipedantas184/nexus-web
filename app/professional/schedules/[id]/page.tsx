@@ -1,3 +1,4 @@
+// app/professional/schedules/[id]/page.tsx
 'use client';
 
 import React, { useState } from 'react';
@@ -35,7 +36,9 @@ import {
   FaExternalLinkAlt,
   FaQuestionCircle,
   FaPlus,
-  FaSync
+  FaSync,
+  FaUpload,
+  FaPaperclip
 } from 'react-icons/fa';
 import { 
   FiActivity, 
@@ -49,6 +52,26 @@ import {
   FiSettings
 } from 'react-icons/fi';
 
+/**
+ * Página de visualização detalhada de um cronograma.
+ *
+ * Responsabilidades:
+ * - Exibir informações completas do cronograma
+ * - Listar atividades associadas
+ * - Permitir ações (editar, duplicar, atribuir)
+ * - Exibir dados estruturais e técnicos
+ *
+ * Fonte de dados:
+ * - useScheduleDetail (cronograma + atividades)
+ *
+ * ⚠️ IMPORTANTE:
+ * Este componente NÃO executa alterações diretas.
+ * Ele atua como hub de navegação e visualização.
+ *
+ * ⚠️ Impacto:
+ * - gestão de cronogramas
+ * - organização de atividades
+ */
 export default function ScheduleDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -58,6 +81,18 @@ export default function ScheduleDetailPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'progress' | 'analytics' | 'settings'>('overview');
   const [selectedActivity, setSelectedActivity] = useState<string | null>(null);
 
+  // 🔥 Estado para armazenar o feedback visual dos arquivos anexados
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string>>({});
+
+  /**
+   * Hook responsável por carregar:
+   * - dados do cronograma
+   * - lista de atividades
+   *
+   * Configuração:
+   * - includeActivities = true
+   * - includeProgress = false (otimização)
+   */
   const {
     schedule,
     activities,
@@ -108,7 +143,18 @@ export default function ScheduleDetailPage() {
     return isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800';
   };
 
-  // Calcular estatísticas
+  /**
+   * Calcula estatísticas derivadas do cronograma.
+   *
+   * Inclui:
+   * - total de atividades
+   * - carga semanal
+   * - dias ativos
+   * - distribuição por dia
+   * - tipos de atividades
+   *
+   * ⚠️ Processamento feito no client
+   */
   const getStats = () => {
     if (!schedule) return null;
 
@@ -116,7 +162,9 @@ export default function ScheduleDetailPage() {
     const weeklyHours = schedule.metadata.estimatedWeeklyHours || 0;
     const activeDays = schedule.activeDays.length;
     
-    // Agrupar atividades por dia
+    /**
+     * Agrupa atividades por dia da semana (0-6)
+     */
     const activitiesByDay = activities.reduce((acc, activity) => {
       const day = activity.dayOfWeek;
       if (!acc[day]) acc[day] = 0;
@@ -124,7 +172,9 @@ export default function ScheduleDetailPage() {
       return acc;
     }, {} as Record<number, number>);
 
-    // Contar tipos de atividades
+    /**
+     * Conta quantidade de atividades por tipo (ex: quiz, upload, etc.)
+     */
     const activityTypes = activities.reduce((acc, activity) => {
       const type = activity.type;
       if (!acc[type]) acc[type] = 0;
@@ -141,8 +191,33 @@ export default function ScheduleDetailPage() {
     };
   };
 
+  /**
+   * Gerencia upload local de arquivos (feedback visual).
+   *
+   * ⚠️ IMPORTANTE:
+   * - NÃO salva no backend
+   * - apenas atualiza UI (estado local)
+   *
+   * Uso:
+   * - mostrar nome do arquivo anexado
+   */
+  const handleFileUpload = (activityId: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setUploadedFiles(prev => ({
+        ...prev,
+        [activityId]: file.name
+      }));
+    }
+  };
+
   const stats = getStats();
 
+  /**
+   * Estado de carregamento do cronograma.
+   *
+   * Bloqueia renderização até dados disponíveis
+   */
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30 flex items-center justify-center">
@@ -157,6 +232,13 @@ export default function ScheduleDetailPage() {
     );
   }
 
+  /**
+   * Estado de erro ou cronograma inexistente.
+   *
+   * Permite:
+   * - voltar
+   * - acessar lista de cronogramas
+   */
   if (error || !schedule) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30 flex items-center justify-center p-4">
@@ -204,6 +286,20 @@ export default function ScheduleDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
       {/* Header Superior */}
+
+      /**
+       * Header principal do cronograma.
+       *
+       * Exibe:
+       * - nome
+       * - status (ativo/arquivado)
+       * - categoria
+       *
+       * Inclui ações:
+       * - atribuir
+       * - duplicar
+       * - editar
+       */
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
@@ -245,6 +341,7 @@ export default function ScheduleDetailPage() {
               </button>
               
               <button
+                onClick={() => router.push(`/professional/schedules/${scheduleId}/edit`)}
                 className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium flex items-center gap-2"
               >
                 <FaEdit className="w-4 h-4" />
@@ -257,6 +354,16 @@ export default function ScheduleDetailPage() {
 
       {/* Conteúdo Principal */}
       <div className="max-w-7xl mx-auto px-4 py-8">
+
+        /**
+         * Resumo geral do cronograma.
+         *
+         * Inclui:
+         * - descrição
+         * - período
+         * - carga horária
+         * - total de atividades
+         */
         {/* Cartão de Resumo */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm mb-8 overflow-hidden">
           <div className="p-6">
@@ -333,6 +440,10 @@ export default function ScheduleDetailPage() {
                 <div className="mb-6">
                   <h3 className="text-sm font-medium text-gray-700 mb-3">Dias Ativos na Semana</h3>
                   <div className="flex gap-2">
+
+                    /**
+                     * Representa visualmente os dias ativos do cronograma
+                     */
                     {daysOfWeek.map((day, index) => (
                       <div
                         key={day}
@@ -369,6 +480,16 @@ export default function ScheduleDetailPage() {
           </div>
         </div>
 
+        /**
+         * Controle de navegação interna.
+         *
+         * Tabs:
+         * - overview
+         * - activities
+         * - progress
+         * - analytics
+         * - settings
+         */
         {/* Navegação por Tabs */}
         <div className="mb-6">
           <div className="flex border-b border-gray-200">
@@ -446,6 +567,15 @@ export default function ScheduleDetailPage() {
 
         {/* Conteúdo da Tab Ativa */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+
+          /**
+           * Visão geral do cronograma.
+           *
+           * Inclui:
+           * - distribuição de atividades
+           * - tipos de atividades
+           * - dados técnicos
+           */
           {activeTab === 'overview' && (
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-6">Visão Geral do Cronograma</h2>
@@ -456,6 +586,10 @@ export default function ScheduleDetailPage() {
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Distribuição de Atividades por Dia</h3>
                   <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
                     {daysOfWeek.map((day, index) => {
+
+                      /**
+                       * Mostra quantidade de atividades por dia da semana
+                       */
                       const activityCount = stats.activitiesByDay[index] || 0;
                       return (
                         <div key={day} className="text-center">
@@ -486,6 +620,9 @@ export default function ScheduleDetailPage() {
                 <div className="mb-8">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Tipos de Atividades</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    /**
+                     * Exibe contagem de atividades por tipo (ex: quiz, upload, etc.)
+                     */
                     {Object.entries(stats.activityTypes).map(([type, count]) => (
                       <div key={type} className="bg-gray-50 p-4 rounded-xl">
                         <div className="text-sm text-gray-500 mb-1 capitalize">{type}</div>
@@ -496,6 +633,14 @@ export default function ScheduleDetailPage() {
                 </div>
               )}
 
+              /**
+               * Informações internas do cronograma.
+               *
+               * Inclui:
+               * - ID
+               * - data de criação
+               * - configurações
+               */
               {/* Dados Técnicos */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Dados Técnicos</h3>
@@ -548,6 +693,15 @@ export default function ScheduleDetailPage() {
             </div>
           )}
 
+          /**
+           * Lista completa de atividades do cronograma.
+           *
+           * Inclui:
+           * - ordenação por dia + ordem
+           * - metadados (duração, pontos, dificuldade)
+           *
+           * ⚠️ Núcleo estrutural do cronograma
+           */
           {activeTab === 'activities' && (
             <div>
               <div className="flex items-center justify-between mb-6">
@@ -568,7 +722,7 @@ export default function ScheduleDetailPage() {
                   <p className="text-gray-500 max-w-md mx-auto mb-6">
                     Este cronograma não possui atividades cadastradas.
                   </p>
-                  <button className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 font-medium flex items-center gap-2 mx-auto">
+                  <button onClick={() => router.push(`/professional/schedules/${schedule.id}/edit`)} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 font-medium flex items-center gap-2 mx-auto">
                     <FaPlus className="w-4 h-4" />
                     <span>Adicionar Primeira Atividade</span>
                   </button>
@@ -576,6 +730,10 @@ export default function ScheduleDetailPage() {
               ) : (
                 <div className="space-y-4">
                   {activities
+                    
+                    /**
+                     * Ordena atividades por dia da semana e ordem interna
+                     */
                     .sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.orderIndex - b.orderIndex)
                     .map((activity) => (
                       <div
@@ -623,13 +781,14 @@ export default function ScheduleDetailPage() {
                             
                             <div className="flex items-center gap-2">
                               <button
-                                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                onClick={() => router.push(`/professional/schedules/${schedule.id}/edit`)}
+                                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                                 title="Editar atividade"
                               >
                                 <FaEdit className="w-4 h-4" />
                               </button>
                               <button
-                                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                                 title="Visualizar atividade"
                               >
                                 <FaEye className="w-4 h-4" />
@@ -660,6 +819,53 @@ export default function ScheduleDetailPage() {
                               Ordem: {activity.orderIndex + 1}
                             </div>
                           </div>
+                          
+                          /**
+                           * Seção de upload de arquivos da atividade.
+                           *
+                           * Condição:
+                           * - tipo inclui "upload"
+                           * - ou configuração exige arquivo
+                           *
+                           * ⚠️ IMPORTANTE:
+                           * - atualmente apenas feedback visual
+                           * - não persiste no backend
+                           *
+                           * ⚠️ Futuro:
+                           * integrar com Firebase Storage
+                           */
+                          {/*  NOVA SEÇÃO: ENVIO DE ARQUIVOS (Renderiza se o tipo for upload ou se exigir arquivo na config) */}
+                          {(activity.type?.toLowerCase().includes('upload') || (activity.config as any)?.requiresFileUpload || (activity.metadata as any)?.requiresFileUpload) && (
+                            <div className="mt-4 pt-4 border-t border-gray-100">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-blue-50/50 p-4 rounded-xl border border-blue-100 gap-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
+                                    <FaUpload className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-sm font-medium text-gray-900">Material da Atividade</h4>
+                                    {uploadedFiles[activity.id] ? (
+                                      <p className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                                        <FaCheckCircle className="w-3 h-3" /> {uploadedFiles[activity.id]}
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-gray-500">Anexe o arquivo necessário para esta atividade.</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <label className="cursor-pointer shrink-0 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 shadow-sm w-full sm:w-auto justify-center">
+                                  <FaPaperclip className="w-4 h-4" />
+                                  <span>{uploadedFiles[activity.id] ? 'Trocar Arquivo' : 'Anexar Arquivo'}</span>
+                                  <input 
+                                    type="file" 
+                                    className="hidden" 
+                                    onChange={(e) => handleFileUpload(activity.id, e)} 
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          )}
+
                         </div>
                       </div>
                     ))}
@@ -668,6 +874,20 @@ export default function ScheduleDetailPage() {
             </div>
           )}
 
+          /**
+           * Área de visualização do progresso dos alunos neste cronograma.
+           *
+           * Objetivo:
+           * - Mostrar desempenho dos alunos atribuídos
+           * - Exibir evolução (completion, streak, etc.)
+           *
+           * ⚠️ Estado atual:
+           * - Ainda é um placeholder (não implementado)
+           *
+           * ⚠️ Futuro:
+           * - Integrar com ScheduleInstanceService
+           * - Exibir métricas reais por aluno
+           */
           {activeTab === 'progress' && (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl mb-6">
@@ -689,6 +909,21 @@ export default function ScheduleDetailPage() {
             </div>
           )}
 
+          /**
+           * Aba de análises do cronograma.
+           *
+           * Função:
+           * - Redirecionar o usuário para o dashboard analítico completo
+           * - Centralizar análise em uma página dedicada (AnalyticsPage)
+           *
+           * ⚠️ IMPORTANTE:
+           * Este componente NÃO processa analytics diretamente.
+           * Ele apenas atua como gateway para a página de analytics global.
+           *
+           * ⚠️ Decisão de arquitetura:
+           * - evita duplicação de lógica
+           * - mantém analytics centralizado em um único fluxo
+           */
           {activeTab === 'analytics' && (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl mb-6">
@@ -701,7 +936,7 @@ export default function ScheduleDetailPage() {
                 Visualize análises detalhadas sobre o desempenho deste cronograma.
               </p>
               <button
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 font-medium inline-flex items-center gap-2"
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 font-medium inline-flex items-center gap-2 cursor-pointer"
                 onClick={() => router.push(`/professional/analytics?schedule=${schedule.id}`)}
               >
                 <FaChartBar className="w-4 h-4" />
@@ -710,6 +945,13 @@ export default function ScheduleDetailPage() {
             </div>
           )}
 
+          /**
+           * Configurações administrativas do cronograma.
+           *
+           * Inclui:
+           * - dados editáveis (visual)
+           * - ações administrativas
+           */
           {activeTab === 'settings' && (
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-6">Configurações do Cronograma</h2>
@@ -727,7 +969,8 @@ export default function ScheduleDetailPage() {
                       <input
                         type="text"
                         defaultValue={schedule.name}
-                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 focus:outline-none"
                       />
                     </div>
                     
@@ -738,7 +981,8 @@ export default function ScheduleDetailPage() {
                       <textarea
                         defaultValue={schedule.description || ''}
                         rows={4}
-                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 focus:outline-none"
                       />
                     </div>
                     
@@ -748,7 +992,8 @@ export default function ScheduleDetailPage() {
                       </label>
                       <select
                         defaultValue={schedule.category}
-                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled
+                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 focus:outline-none"
                       >
                         <option value="therapeutic">Terapêutico</option>
                         <option value="educational">Educacional</option>
@@ -773,7 +1018,8 @@ export default function ScheduleDetailPage() {
                       
                       <div className="space-y-3">
                         <button
-                          className="w-full px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium text-left"
+                          onClick={() => router.push(`/professional/schedules/new?copy=${schedule.id}`)}
+                          className="w-full px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium text-left cursor-pointer"
                         >
                           <div className="flex items-center justify-between">
                             <span>Duplicar Cronograma</span>
@@ -802,6 +1048,14 @@ export default function ScheduleDetailPage() {
                     </div>
                   </div>
 
+                  /**
+                   * Ações irreversíveis.
+                   *
+                   * Inclui:
+                   * - exclusão permanente
+                   *
+                   * ⚠️ Deve ter confirmação no backend
+                   */
                   {/* Zona de Perigo */}
                   <div className="bg-red-50 border border-red-200 rounded-xl p-6">
                     <h3 className="text-lg font-semibold text-red-800 mb-4">Zona de Perigo</h3>
@@ -820,7 +1074,15 @@ export default function ScheduleDetailPage() {
             </div>
           )}
         </div>
-
+        
+        /**
+         * Ações finais do cronograma.
+         *
+         * Inclui:
+         * - refresh
+         * - imprimir
+         * - atribuir
+         */
         {/* Botões de Ação Footer */}
         <div className="mt-8 flex items-center justify-between">
           <div className="text-sm text-gray-500">
@@ -830,7 +1092,7 @@ export default function ScheduleDetailPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={refresh}
-              className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium flex items-center gap-2"
+              className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium flex items-center gap-2 cursor-pointer"
             >
               <FaSync className="w-4 h-4" />
               <span>Atualizar</span>

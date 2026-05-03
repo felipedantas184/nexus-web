@@ -6,7 +6,12 @@ import {
   Timestamp,
   increment,
   arrayUnion,
-  getDoc
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs
 } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 import {
@@ -29,6 +34,23 @@ interface CompletionData {
   attachments?: string[];
 }
 
+/**
+ * Serviço central responsável por gerenciar o ciclo de vida do progresso das atividades do aluno.
+ *
+ * Responsabilidades:
+ * - Controlar estados da atividade (pending → in_progress → completed / skipped)
+ * - Persistir execução (executionData)
+ * - Calcular pontuação e tempo gasto
+ * - Atualizar métricas derivadas (snapshot semanal, stats do aluno, cache de instância)
+ *
+ * ⚠️ IMPORTANTE:
+ * Este serviço escreve em múltiplas coleções (activityProgress, students, weeklySnapshots),
+ * portanto qualquer alteração aqui impacta:
+ * - dashboards
+ * - analytics
+ * - ranking de bem-estar
+ * - progressão do aluno
+ */
 export class ProgressService {
   private static readonly COLLECTIONS = {
     PROGRESS: 'activityProgress',
@@ -36,7 +58,20 @@ export class ProgressService {
   };
 
   /**
-   * Inicia uma atividade
+   * Inicia uma atividade marcando como "in_progress".
+   *
+   * Fluxo:
+   * 1. Busca o progresso atual
+   * 2. Valida que ainda está "pending"
+   * 3. Atualiza Firestore
+   * 4. Retorna versão atualizada (otimista)
+   *
+   * Regra de negócio:
+   * - Uma atividade NÃO pode ser iniciada duas vezes
+   *
+   * ⚠️ Risco:
+   * - Não usa transação → se duas chamadas simultâneas ocorrerem,
+   * pode haver corrida de estado (race condition leve)
    */
   static async startActivity(
     progressId: string,
@@ -86,7 +121,28 @@ export class ProgressService {
   }
 
   /**
-   * Completa uma atividade
+   * Conclui uma atividade e dispara toda a cascata de efeitos do sistema.
+   *
+   * Ordem de execução:
+   * 1. Valida status atual
+   * 2. Calcula pontuação
+   * 3. Calcula tempo gasto
+   * 4. Atualiza documento principal (activityProgress)
+   * 5. Atualiza snapshot semanal
+   * 6. Atualiza cache da instância
+   * 7. Atualiza estatísticas do aluno
+   *
+   * Side effects:
+   * - Escrita em múltiplas coleções
+   * - Atualização indireta de dashboards e analytics
+   *
+   * ⚠️ DECISÃO IMPORTANTE:
+   * A escrita principal (updateDoc do progress) acontece ANTES dos efeitos secundários.
+   * Isso garante que a atividade nunca fique "não concluída" por falha em sistemas auxiliares.
+   *
+   * ⚠️ Risco:
+   * - Falhas em snapshot/cache/stats não são rollbackadas
+   * - Pode haver inconsistência temporária entre coleções
    */
   static async completeActivity(
     progressId: string,
@@ -112,7 +168,17 @@ export class ProgressService {
 
       console.log('📊 Pontuação calculada:', scoring);
 
-      // 3. Calcular tempo gasto CORRETAMENTE
+      /**
+       * Determina o tempo gasto na atividade.
+       *
+       * Prioridade:
+       * 1. Usa valor enviado pelo front (mais confiável)
+       * 2. Se não existir, calcula com base em startedAt
+       * 3. Se falhar, usa fallback (30 minutos)
+       *
+       * ⚠️ Risco:
+       * - Diferença baseada no clock do cliente → pode gerar inconsistência leve
+       */
       let timeSpentValue = completionData.timeSpent;
 
       // Se não veio no completionData, calcular
@@ -149,7 +215,17 @@ export class ProgressService {
         ...completionData
       };
 
-      // Remover quaisquer Promises ou objetos inválidos
+      /**
+       * Limpeza defensiva do executionData antes de persistir.
+       *
+       * Motivo:
+       * Firestore NÃO aceita Promise como valor.
+       *
+       * ⚠️ Risco:
+       * - Se não fizer isso, o updateDoc pode falhar silenciosamente
+       * - Pode quebrar o fluxo de submissão da atividade
+       * - Pode gerar dados inconsistentes no banco
+       */
       Object.keys(executionDataUpdate).forEach(key => {
         if (executionDataUpdate[key] instanceof Promise) {
           console.warn('⚠️ Removendo Promise do executionData:', key);
@@ -163,6 +239,13 @@ export class ProgressService {
       await updateDoc(progressRef, updateData);
 
       console.log(`✅ Atividade ${progressId} completada com sucesso`);
+
+      // 🔥 FIX: ATUALIZAR WEEKLY SNAPSHOT
+      try {
+        await this.updateWeeklySnapshot(studentId, progress.weekNumber || 1, scoring.totalPoints, timeSpentValue);
+      } catch (snapError) {
+        console.error('⚠️ Erro ao atualizar snapshot semanal:', snapError);
+      }
 
       // 7. Atualizar cache da instância
       try {
@@ -302,7 +385,23 @@ export class ProgressService {
   }
 
   /**
-   * Métodos auxiliares privados
+   * Calcula a pontuação da atividade.
+   *
+   * Estrutura atual:
+   * - Pontos base fixos
+   * - Bônus por tempo
+   * - Bônus emocional
+   *
+   * ⚠️ IMPORTANTE:
+   * Hoje é uma lógica simplificada.
+   * Em produção ideal:
+   * - deve vir do activitySnapshot
+   * - deve ser configurável por tipo de atividade
+   *
+   * Impacto:
+   * - afeta nível do aluno
+   * - afeta ranking
+   * - afeta analytics
    */
   private static async calculateScoring(
     progressId: string,
@@ -387,30 +486,173 @@ export class ProgressService {
       return 0;
     }
   }
-
+  /**
+   * Atualiza métricas permanentes do aluno.
+   *
+   * Atualiza:
+   * - totalPoints (incremental)
+   * - level (derivado)
+   * - streak (condicional)
+   * - lastActivityAt
+   *
+   * Regra de streak:
+   * - Só incrementa se ainda não houve atividade hoje
+   *
+   * ⚠️ Risco técnico:
+   * - level é calculado fora de transação
+   * - em caso de concorrência, pode ficar inconsistente momentaneamente
+   *
+   * Melhor abordagem futura:
+   * - usar transaction()
+   */
   private static async updateStudentStats(
     studentId: string,
     points: number
   ): Promise<void> {
+    console.log('[updateStudentStats] Iniciando atualização:', { studentId, points });
+
+    const studentRef = doc(firestore, this.COLLECTIONS.STUDENTS, studentId);
+
+    // 1. Ler estado atual para calcular level e verificar streak
+    const snap = await getDoc(studentRef);
+    if (!snap.exists()) {
+      throw new Error(`[updateStudentStats] Documento students/${studentId} não encontrado`);
+    }
+
+    const profile = snap.data()?.profile ?? {};
+    const safePoints = Number(points) || 0; 
+    const currentPoints: number = profile.totalPoints ?? 0;
+    const newTotalPoints = currentPoints + points;
+    const newLevel = Math.floor(newTotalPoints / 200) + 1;
+
+    // 2. Streak: incrementar só se não houver atividade concluída hoje
+    const lastActivityRaw = profile.lastActivityAt;
+    const lastActivityAt: Date | undefined =
+      lastActivityRaw?.toDate?.() instanceof Date
+        ? lastActivityRaw.toDate()
+        : lastActivityRaw instanceof Date
+        ? lastActivityRaw
+        : undefined;
+
+    const today = new Date();
+    const alreadyActiveToday =
+      lastActivityAt != null &&
+      lastActivityAt.getFullYear() === today.getFullYear() &&
+      lastActivityAt.getMonth() === today.getMonth() &&
+      lastActivityAt.getDate() === today.getDate();
+
+    const updatePayload: Record<string, unknown> = {
+      'profile.totalPoints': increment(safePoints),
+      'profile.level': newLevel,
+      'profile.lastActivityAt': serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    if (!alreadyActiveToday) {
+      updatePayload['profile.streak'] = increment(1);
+    }
+
+    console.log('[updateStudentStats] Gravando:', {
+      newTotalPoints,
+      newLevel,
+      streakIncrement: !alreadyActiveToday,
+    });
+
+    // 3. Escrever — sem silenciar o erro (sobe para o chamador que já tem try/catch)
+    await updateDoc(studentRef, updatePayload);
+
+    console.log('[updateStudentStats] ✅ Concluído com sucesso');
+  }
+
+  /**
+   * Atualiza ou cria o WeeklySnapshot do aluno
+   */
+  private static async updateWeeklySnapshot(
+    studentId: string,
+    weekNumber: number,
+    pointsEarned: number,
+    timeSpent: number
+  ): Promise<void> {
     try {
-      const studentRef = doc(firestore, this.COLLECTIONS.STUDENTS, studentId);
+      // 1. Cria um ID previsível para o snapshot daquela semana
+      const snapshotId = `${studentId}_week_${weekNumber}`;
+      const snapshotRef = doc(firestore, 'weeklySnapshots', snapshotId);
+      
+      const snapDoc = await getDoc(snapshotRef);
 
-      await updateDoc(studentRef, {
-        'profile.totalPoints': increment(points),
-        'profile.streak': increment(1),
-        'profile.lastActivityAt': serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      if (snapDoc.exists()) {
+        // Se já existe, apenas incrementa os valores
+        await updateDoc(snapshotRef, {
+          'metrics.completedActivities': increment(1),
+          'metrics.totalPointsEarned': increment(pointsEarned),
+          'metrics.totalTimeSpent': increment(timeSpent),
+          // A taxa de conclusão precisa ser recalculada se totalActivities existir
+          'updatedAt': serverTimestamp()
+        });
 
+        // Recalcular a taxa de conclusão (Completion Rate)
+        const data = snapDoc.data();
+        if (data.metrics && data.metrics.totalActivities > 0) {
+          const newCompleted = (data.metrics.completedActivities || 0) + 1;
+          const newRate = Math.round((newCompleted / data.metrics.totalActivities) * 100);
+          
+          await updateDoc(snapshotRef, {
+             'metrics.completionRate': newRate
+          });
+        }
+      } else {
+        // Se for a primeira atividade da semana, cria o documento inteiro
+        // Pega as datas da semana atual
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay()); // Domingo
+        
+        const endOfWeek = new Date(now);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // Sábado
+
+        await setDoc(snapshotRef, {
+          studentId,
+          weekNumber,
+          weekStartDate: Timestamp.fromDate(startOfWeek),
+          weekEndDate: Timestamp.fromDate(endOfWeek),
+          metrics: {
+            completedActivities: 1,
+            totalPointsEarned: pointsEarned,
+            totalTimeSpent: timeSpent,
+            totalActivities: 5, // Um valor padrão se não soubermos o total
+            completionRate: 20, // 1/5
+            streakAtEndOfWeek: 1,
+            adherenceScore: 100,
+            consistencyScore: 100
+          },
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+      console.log(`✅ WeeklySnapshot atualizado para a semana ${weekNumber}`);
     } catch (error) {
-      console.error('Erro ao atualizar estatísticas do aluno:', error);
-      // Não falhar a operação principal
+      console.error('Erro detalhado no updateWeeklySnapshot:', error);
+      throw error;
     }
   }
 
   /**
- * Busca progresso por ID e valida acesso do aluno
- */
+   * Busca e normaliza dados de progresso.
+   *
+   * Responsabilidade:
+   * - converter Timestamp → Date
+   * - padronizar estrutura para o front
+   *
+   * ⚠️ CRÍTICO:
+   * A validação de acesso está comentada:
+   *
+   * if (data.studentId !== studentId)
+   *
+   * Isso significa:
+   * - qualquer chamada pode acessar qualquer atividade
+   *
+   * 👉 Isso é um risco de segurança se não for tratado em outro nível
+   */
   static async getActivityProgress(
     progressId: string,
     studentId: string
@@ -553,5 +795,122 @@ export class ProgressService {
       console.error('❌ [getActivitiesByWeekAndDay] Erro:', error);
       throw new Error(`Erro ao buscar atividades: ${error.message}`);
     }
+  }
+
+  /**
+   * Recalcula métricas do aluno com base no histórico completo.
+   *
+   * Uso:
+   * - correção de dados
+   * - auditoria
+   * - migração de lógica
+   *
+   * Estratégia:
+   * - percorre TODOS os activityProgress
+   * - recalcula pontos e atividades concluídas
+   *
+   * Prioridade de pontuação:
+   * 1. scoring.pointsEarned
+   * 2. snapshot.pointsOnCompletion
+   * 3. fallback = 0
+   *
+   * ⚠️ Risco:
+   * - operação pesada (scan completo)
+   * - não deve ser usada em tempo real
+   *
+   * Segurança:
+   * - dryRun evita escrita
+   */
+  static async recalculateStudentPermanentMetrics(
+    studentId: string,
+    options: { dryRun?: boolean } = {}
+  ): Promise<{
+    studentId: string;
+    totalActivityProgress: number;
+    totalCompletedActivities: number;
+    totalPoints: number;
+    level: number;
+    dryRun: boolean;
+  }> {
+    const { dryRun = false } = options;
+
+    console.group(`[recalculate] studentId=${studentId} dryRun=${dryRun}`);
+
+    // 1. Buscar TODOS os activityProgress do aluno (sem filtro de isActive)
+    const q = query(
+      collection(firestore, this.COLLECTIONS.PROGRESS),
+      where('studentId', '==', studentId)
+    );
+    const snap = await getDocs(q);
+    console.log(`[recalculate] Documentos encontrados: ${snap.size}`);
+
+    let totalPoints = 0;
+    let totalCompletedActivities = 0;
+    const examples: string[] = [];
+
+    snap.forEach((d) => {
+      const data = d.data();
+      const isCompleted = data.status === 'completed';
+
+      // Calcular pontos desta atividade
+      const earnedFromScoring = Number(data.scoring?.pointsEarned ?? 0);
+      const earnedFromSnapshot = Number(
+        data.activitySnapshot?.scoring?.pointsOnCompletion ?? 0
+      );
+
+      let points = 0;
+      if (earnedFromScoring > 0) {
+        points = earnedFromScoring;
+      } else if (isCompleted && earnedFromSnapshot > 0) {
+        points = earnedFromSnapshot;
+      } else if (isCompleted) {
+        points = 0; // completada sem pontuação registrada
+      }
+
+      if (isCompleted) {
+        totalCompletedActivities += 1;
+        totalPoints += points;
+      }
+
+      if (examples.length < 5) {
+        examples.push(
+          `  [${data.status}] "${data.activitySnapshot?.title ?? d.id}" → scoring.pointsEarned=${earnedFromScoring} | snapshot.pointsOnCompletion=${earnedFromSnapshot} → usado=${points}`
+        );
+      }
+    });
+
+    const level = Math.floor(totalPoints / 200) + 1;
+
+    console.log(`[recalculate] totalActivityProgress : ${snap.size}`);
+    console.log(`[recalculate] totalCompletedActivities: ${totalCompletedActivities}`);
+    console.log(`[recalculate] totalPoints             : ${totalPoints}`);
+    console.log(`[recalculate] level                   : ${level}`);
+    console.log('[recalculate] Exemplos (primeiros 5):');
+    examples.forEach((e) => console.log(e));
+
+    if (!dryRun) {
+      const studentRef = doc(firestore, this.COLLECTIONS.STUDENTS, studentId);
+      await updateDoc(studentRef, {
+        'profile.totalPoints': totalPoints,
+        'profile.level': level,
+        'profile.totalCompletedActivities': totalCompletedActivities,
+        'profile.lastMetricsRecalculatedAt': serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      console.log('[recalculate] ✅ Escrito no Firestore com sucesso');
+    } else {
+      console.log('[recalculate] ⚠️  dryRun=true — nada foi escrito no Firestore');
+    }
+
+    console.groupEnd();
+
+    return {
+      studentId,
+      totalActivityProgress: snap.size,
+      totalCompletedActivities,
+      totalPoints,
+      level,
+      dryRun,
+    };
   }
 }

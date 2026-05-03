@@ -1,226 +1,326 @@
 // hooks/useStudentWeeklyProgress.ts
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { ScheduleInstanceService } from '@/lib/services/ScheduleInstanceService';
+import { ActivityProgress, WeeklySnapshot } from '@/types/schedule';
 import { useAuth } from '@/context/AuthContext';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
-import { WeeklySnapshot } from '@/types/schedule';
 
-interface StudentWeeklyData {
-  // Métricas atuais
+export interface ProgressData {
+  performanceTrend: 'improving' | 'declining' | 'stable';
   currentMetrics: {
     streak: number;
     totalPoints: number;
     level: number;
-    completionRate: number;
-    totalActivities: number;
     completedActivities: number;
+    totalActivities: number;
+    completionRate: number;
     timeSpent: number;
   };
-  
-  // Snapshots semanais
   weeklySnapshots: WeeklySnapshot[];
-  
-  // Tendência
-  performanceTrend: 'improving' | 'stable' | 'declining';
-  
-  // Insights
-  insights: {
-    strengths: string[];
-    challenges: string[];
-    recommendations: string[];
-  };
-  
-  // Metadados
-  lastUpdated: Date;
 }
 
+/**
+ * Hook responsável por consolidar o progresso semanal do aluno.
+ *
+ * Responsabilidades:
+ * - Buscar métricas reais do perfil (XP, streak, nível)
+ * - Carregar snapshots semanais históricos
+ * - Buscar atividades da semana atual
+ * - Calcular métricas derivadas (completionRate, tempo, trend)
+ *
+ * Fontes de dados:
+ * - students (perfil)
+ * - weeklySnapshots (histórico)
+ * - ScheduleInstanceService (atividades atuais)
+ *
+ * ⚠️ IMPORTANTE:
+ * Este hook mistura:
+ * - dados persistidos (Firestore)
+ * - dados calculados em tempo real
+ *
+ * ⚠️ Impacto:
+ * - dashboard do aluno
+ * - progresso semanal
+ * - analytics
+ */
 export function useStudentWeeklyProgress() {
   const { user } = useAuth();
-  const [data, setData] = useState<StudentWeeklyData | null>(null);
+  const [data, setData] = useState<ProgressData | null>(null);
+  const [weeklyActivities, setWeeklyActivities] = useState<ActivityProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Calcula tempo total gasto nas atividades.
+   *
+   * Prioridade:
+   * 1. Usa tempo real (executionData.timeSpent)
+   * 2. Fallback para tempo estimado (metadata.estimatedDuration)
+   *
+   * ⚠️ Importante:
+   * - garante consistência mesmo sem dados reais
+   */
+  const calculateTimeSpent = useCallback((activities: ActivityProgress[]): number => {
+    const completed = activities.filter(activity => activity.status === 'completed');
+
+    return completed.reduce((total, activity) => {
+      /**
+       * Tempo real registrado durante execução da atividade
+       */
+      const realTime = Number(activity.executionData?.timeSpent);
+
+      /**
+       * Tempo estimado definido no cronograma
+       */
+      const estimatedTime = Number(activity.activitySnapshot?.metadata?.estimatedDuration);
+
+      if (Number.isFinite(realTime) && realTime > 0) {
+        return total + realTime;
+      }
+
+      if (Number.isFinite(estimatedTime) && estimatedTime > 0) {
+        return total + estimatedTime;
+      }
+
+      return total;
+    }, 0);
+  }, []);
+
+  /**
+   * Carrega e consolida todos os dados de progresso do aluno.
+   *
+   * Fluxo:
+   * 1. Lê perfil (XP, streak, nível)
+   * 2. Busca snapshots históricos
+   * 3. Busca atividades da semana atual
+   * 4. Calcula métricas (completion, tempo)
+   * 5. Define tendência (trend)
+   *
+   * ⚠️ IMPORTANTE:
+   * Esse método é o ponto central de sincronização do progresso
+   */
   const loadProgressData = useCallback(async () => {
-    if (!user || user.role !== 'student') {
-      setData(null);
-      setLoading(false);
-      return;
-    }
+    if (!user?.id || user.role !== 'student') return;
+
+    console.group('📊 [PROGRESS-HOOK] Sincronizando Métricas Reais');
 
     try {
       setLoading(true);
-      setError(null);
 
-      console.log('🔍 Buscando weeklySnapshots para o aluno:', user.id);
+      console.log('🔍 [PASSO 1] Lendo perfil do aluno para XP e Streak...');
 
-      // Buscar snapshots do aluno
-      const snapshotsRef = collection(firestore, 'weeklySnapshots');
-      const q = query(
-        snapshotsRef,
-        where('studentId', '==', user.id),
-        orderBy('weekNumber', 'desc'),
-        limit(8) // Últimas 8 semanas
+      /**
+       * Busca dados permanentes do aluno.
+       *
+       * Inclui:
+       * - totalPoints
+       * - streak
+       * - level
+       */
+      const studentRef = doc(firestore, 'students', user.id);
+      const studentSnap = await getDoc(studentRef);
+      const studentProfile = studentSnap.data()?.profile || {};
+
+      const totalPoints = Number(studentProfile.totalPoints ?? 0);
+      const streak = Number(studentProfile.streak ?? 0);
+      const level = Number(studentProfile.level ?? Math.floor(totalPoints / 200) + 1);
+
+      console.log('🔍 [PASSO 2] Buscando WeeklySnapshots...');
+
+      /** 
+       * Busca histórico semanal do aluno.
+       *
+       * Fonte:
+       * - weeklySnapshots collection
+       *
+       * ⚠️ Pode conter dados antigos ou inconsistentes
+       */
+      const snapshotsQuery = query(
+        collection(firestore, 'weeklySnapshots'),
+        where('studentId', '==', user.id)
       );
 
-      const querySnapshot = await getDocs(q);
-      
-      console.log('📊 Snapshots encontrados:', querySnapshot.size);
+      const snapshotsSnap = await getDocs(snapshotsQuery);
+      const snapshots = snapshotsSnap.docs
+        .map(snapshotDoc => {
+          const snapshotData = snapshotDoc.data();
 
-      const snapshots: WeeklySnapshot[] = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          weekStartDate: data.weekStartDate?.toDate(),
-          weekEndDate: data.weekEndDate?.toDate(),
-          createdAt: data.createdAt?.toDate(),
-          updatedAt: data.updatedAt?.toDate()
-        } as WeeklySnapshot;
-      });
+          return {
+            id: snapshotDoc.id,
+            ...snapshotData,
+            /**
+             * Converte Timestamp do Firestore para Date
+             */
+            weekStartDate: snapshotData.weekStartDate?.toDate(),
+            weekEndDate: snapshotData.weekEndDate?.toDate(),
+          } as WeeklySnapshot;
+        })
+        .sort((a, b) => b.weekNumber - a.weekNumber);
 
-      // Calcular métricas atuais baseadas nos snapshots
-      const currentMetrics = calculateCurrentMetrics(snapshots);
-      
-      // Determinar tendência
-      const performanceTrend = determineTrend(snapshots);
-      
-      // Extrair insights
-      const insights = extractInsights(snapshots);
+      console.log('🔍 [PASSO 3] Chamando Service para buscar atividades da semana...');
+      /**
+       * Busca atividades da semana atual.
+       *
+       * Fonte:
+       * - ScheduleInstanceService
+       *
+       * ⚠️ Dados mais próximos da execução real
+       */
+      const currentActivities = await ScheduleInstanceService.getWeekActivities(user.id);
+      console.log(`📦 [DADOS] Recebidas ${currentActivities.length} atividades brutas do Service.`);
 
+      setWeeklyActivities(currentActivities);
+      
+      /**
+       * Agrupa atividades por status (completed, pending, etc.)
+       */
+      const byStatusWP = currentActivities.reduce<Record<string, number>>((acc, activity) => {
+        acc[activity.status] = (acc[activity.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      console.log('[WEEKLY_PROGRESS_DIAG] currentActivities por status:', byStatusWP);
+
+      const completedActivities = currentActivities.filter(
+        activity => activity.status === 'completed'
+      );
+
+      const totalActivities = currentActivities.length;
+      const completedCount = completedActivities.length;
+
+      /**
+       * Calcula taxa de conclusão da semana.
+       *
+       * Fórmula:
+       * completed / total * 100
+       */
+      const completionRate =
+        totalActivities > 0
+          ? Math.round((completedCount / totalActivities) * 100)
+          : 0;
+
+      /**
+       * Tempo total gasto (real ou estimado)
+       */    
+      const timeSpent = calculateTimeSpent(currentActivities);
+
+      console.log(
+        `[WEEKLY_PROGRESS_DIAG] completedCount=${completedCount} totalActivities=${totalActivities} rate=${completionRate}% timeSpent=${timeSpent}min`
+      );
+      
+      /**
+       * Calcula tendência de desempenho do aluno.
+       *
+       * Base:
+       * - compara completionRate das últimas semanas
+       *
+       * Regras:
+       * - +5% → improving
+       * - -5% → declining
+       * - resto → stable
+       */
+      let trend: 'improving' | 'declining' | 'stable' = 'stable';
+
+      if (snapshots.length >= 2) {
+        const latestRate = snapshots[0].metrics.completionRate || 0;
+        const previousRate = snapshots[1].metrics.completionRate || 0;
+
+        if (latestRate > previousRate + 5) {
+          trend = 'improving';
+        } else if (latestRate < previousRate - 5) {
+          trend = 'declining';
+        }
+      }
+
+      console.log('✨ [HOOK] Preparando objeto final de DATA para a UI...');
+      
+      /**
+       * Monta objeto final consumido pela UI.
+       *
+       * Inclui:
+       * - métricas atuais
+       * - tendência
+       * - histórico semanal
+       */
       setData({
-        currentMetrics,
+        performanceTrend: trend,
+        currentMetrics: {
+          streak,
+          totalPoints,
+          level,
+          completedActivities: completedCount,
+          totalActivities,
+          completionRate,
+          timeSpent,
+        },
         weeklySnapshots: snapshots,
-        performanceTrend,
-        insights,
-        lastUpdated: new Date()
       });
 
-    } catch (err: any) {
-      console.error('❌ Erro ao carregar weeklySnapshots:', err);
-      setError(err.message || 'Erro ao carregar dados de progresso');
+      setError(null);
+
+      /**
+       * Tratamento de erro global do hook.
+       *
+       * ⚠️ Qualquer falha aqui impacta toda a UI do aluno
+       */
+    } catch (err: unknown) {
+      console.error('❌ [PROGRESS-HOOK] Erro Fatal:', err);
+      setError('Erro ao sincronizar progresso.');
     } finally {
       setLoading(false);
+      console.groupEnd();
     }
-  }, [user]);
-
-  // Calcular métricas atuais a partir dos snapshots
-  const calculateCurrentMetrics = (snapshots: WeeklySnapshot[]) => {
-    if (snapshots.length === 0) {
-      return {
-        streak: 0,
-        totalPoints: 0,
-        level: 1,
-        completionRate: 0,
-        totalActivities: 0,
-        completedActivities: 0,
-        timeSpent: 0
-      };
-    }
-
-    // Último snapshot
-    const latest = snapshots[0];
-    
-    // Calcular totais de todos os snapshots
-    const totalPoints = snapshots.reduce((sum, s) => sum + s.metrics.totalPointsEarned, 0);
-    const totalTimeSpent = snapshots.reduce((sum, s) => sum + s.metrics.totalTimeSpent, 0);
-    const totalCompleted = snapshots.reduce((sum, s) => sum + s.metrics.completedActivities, 0);
-    const totalActivities = snapshots.reduce((sum, s) => sum + s.metrics.totalActivities, 0);
-
-    // Calcular nível baseado em pontos (exemplo: cada 100 pontos = 1 nível)
-    const level = Math.max(1, Math.floor(totalPoints / 100) + 1);
-
-    return {
-      streak: latest.metrics.streakAtEndOfWeek,
-      totalPoints,
-      level,
-      completionRate: latest.metrics.completionRate,
-      totalActivities,
-      completedActivities: totalCompleted,
-      timeSpent: totalTimeSpent
-    };
-  };
-
-  // Determinar tendência
-  const determineTrend = (snapshots: WeeklySnapshot[]): 'improving' | 'stable' | 'declining' => {
-    if (snapshots.length < 2) return 'stable';
-    
-    const first = snapshots[snapshots.length - 1];
-    const last = snapshots[0];
-    
-    const change = last.metrics.completionRate - first.metrics.completionRate;
-    
-    if (change > 5) return 'improving';
-    if (change < -5) return 'declining';
-    return 'stable';
-  };
-
-  // Extrair insights dos snapshots
-  const extractInsights = (snapshots: WeeklySnapshot[]) => {
-    const defaultInsights = {
-      strengths: [],
-      challenges: [],
-      recommendations: []
-    };
-
-    if (snapshots.length === 0) return defaultInsights;
-
-    const latest = snapshots[0];
-    
-    // Gerar insights baseados nos dados
-    const strengths: string[] = [];
-    const challenges: string[] = [];
-    const recommendations: string[] = [];
-
-    // Força: alta taxa de conclusão
-    if (latest.metrics.completionRate > 80) {
-      strengths.push('Alta taxa de conclusão de atividades');
-    } else if (latest.metrics.completionRate > 60) {
-      strengths.push('Boa consistência nas atividades');
-    }
-
-    // Força: streak longo
-    if (latest.metrics.streakAtEndOfWeek > 7) {
-      strengths.push(`Sequência de ${latest.metrics.streakAtEndOfWeek} dias de atividades`);
-    }
-
-    // Desafio: baixa consistência
-    if (latest.metrics.consistencyScore < 50) {
-      challenges.push('Baixa consistência na realização das atividades');
-      recommendations.push('Tente manter uma rotina diária de atividades');
-    }
-
-    // Desafio: baixa adesão
-    if (latest.metrics.adherenceScore < 60) {
-      challenges.push('Dificuldade em seguir o cronograma proposto');
-      recommendations.push('Revise seu cronograma e ajuste os horários das atividades');
-    }
-
-    // Recomendações baseadas em padrões
-    if (latest.metrics.completionRate < 40) {
-      recommendations.push('Comece com atividades mais curtas para ganhar momentum');
-    }
-
-    if (latest.metrics.streakAtEndOfWeek === 0 && snapshots.length > 1) {
-      recommendations.push('Que tal começar uma nova sequência hoje?');
-    }
-
-    return {
-      strengths: strengths.slice(0, 3),
-      challenges: challenges.slice(0, 2),
-      recommendations: recommendations.slice(0, 3)
-    };
-  };
-
+  }, [user?.id, user?.role, calculateTimeSpent]);
+  
+  /**
+   * Executa carregamento automático ao montar o hook
+   */
   useEffect(() => {
     loadProgressData();
   }, [loadProgressData]);
 
+  /**
+   * Estatísticas rápidas da semana.
+   *
+   * Inclui:
+   * - total de atividades
+   * - concluídas
+   * - pendentes
+   * - percentual
+   *
+   * ⚠️ Derivado de weeklyActivities
+   */
+  const stats = useMemo(() => {
+    const total = weeklyActivities.length;
+    const completed = weeklyActivities.filter(activity => activity.status === 'completed').length;
+    
+    /**
+     * API pública do hook.
+     *
+     * Fornece:
+     * - data → métricas completas
+     * - weeklyActivities → atividades atuais
+     * - stats → resumo rápido
+     * - loading / error
+     * - refresh → recarregar dados
+     */
+    return {
+      total,
+      completed,
+      percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+      pending: total - completed,
+    };
+  }, [weeklyActivities]);
+
   return {
     data,
+    weeklyActivities,
+    stats,
     loading,
     error,
-    refresh: loadProgressData
+    refresh: loadProgressData,
   };
 }

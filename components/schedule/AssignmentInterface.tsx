@@ -1,48 +1,22 @@
-// components/schedule/AssignmentInterface.tsx - VERSÃO OTIMIZADA
+// components/schedule/AssignmentInterface.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AssignScheduleDTO } from '@/types/schedule';
 import { Student } from '@/types/auth';
 import { useScheduleAssignment } from '@/hooks/useScheduleAssignment';
 import {
-  FaUser,
-  FaCalendarAlt,
-  FaFilter,
-  FaSearch,
-  FaUsers,
-  FaCheck,
-  FaTimes,
-  FaExclamationTriangle,
-  FaCog,
-  FaSchool,
-  FaGraduationCap,
-  FaUserTie,
-  FaGlobe,
-  FaShieldAlt,
-  FaFire,
-  FaStar,
-  FaClock,
-  FaChartBar,
-  FaEye,
-  FaEyeSlash,
-  FaCalendarPlus,
-  FaLayerGroup
+  FaUser, FaCheck, FaExclamationTriangle, FaUsers, FaCalendarAlt,
+  FaSearch, FaEye, FaEyeSlash, FaSchool, FaGraduationCap, FaGlobe,
+  FaShieldAlt, FaUserTie, FaClock, FaChartBar
 } from 'react-icons/fa';
 import { TbFilter } from 'react-icons/tb';
 import { useAuth } from '@/context/AuthContext';
-import { StudentService } from '@/lib/services/StudentService';
 
 interface StudentWithStatus extends Student {
   hasActiveInstance?: boolean;
   canReceiveSchedule: boolean;
-  stats?: {
-    totalPoints: number;
-    streak: number;
-    level: number;
-  };
   isAssignedToMe: boolean;
-  engagementScore?: number; // 0-100
 }
 
 interface AssignmentInterfaceProps {
@@ -50,150 +24,115 @@ interface AssignmentInterfaceProps {
   onSuccess?: () => void;
   onCancel?: () => void;
 }
+/**
+ * Interface responsável por atribuir um cronograma a múltiplos alunos.
+ *
+ * Responsabilidades:
+ * - Carregar cronograma e lista de alunos
+ * - Filtrar alunos por busca, série e escola
+ * - Controlar seleção de alunos
+ * - Executar atribuição em lote
+ *
+ * ⚠️ IMPORTANTE:
+ * Este componente é a ponte entre:
+ * - UI (seleção do profissional)
+ * - backend (criação de scheduleInstances)
+ *
+ * Qualquer erro aqui impacta diretamente:
+ * - atribuição de cronogramas
+ * - experiência do profissional
+ * - consistência dos dados do aluno
+ */
+export default function AssignmentInterface({ scheduleId, onSuccess, onCancel }: AssignmentInterfaceProps) {
+  const { schedule, assigning, loadScheduleData, loadStudents, assignSchedule, students, userRole } = useScheduleAssignment();
+  const { user } = useAuth();
+  const isCoordinator = userRole === 'coordinator';
 
-export default function AssignmentInterface({
-  scheduleId,
-  onSuccess,
-  onCancel
-}: AssignmentInterfaceProps) {
-  const {
-    loadingStudents,
-    students,
-    schedule,
-    activities,
-    assigning,
-    result,
-    loadScheduleData,
-    loadStudents,
-    assignSchedule,
-    clearResult,
-    refreshStudents,
-    userRole
-  } = useScheduleAssignment();
-
-  const getTodayAtMidnight = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today;
-  };
-
-  const [filteredStudents, setFilteredStudents] = useState<StudentWithStatus[]>([]);
-  const [filters, setFilters] = useState({
-    search: '',
-    grade: 'all',
-    school: 'all',
-    assignment: 'all',
-    engagement: 'all' // 'low', 'medium', 'high'
-  });
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [partialResult, setPartialResult] = useState<{ ok: number; failed: Array<{ studentId: string; error: string }> } | null>(null);
+
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ search: '', grade: 'all', school: 'all' });
+  const [grades, setGrades] = useState<string[]>(['all']);
+  const [schools, setSchools] = useState<string[]>(['all']);
+
+  /**
+   * Estado base da atribuição.
+   *
+   * Estratégia:
+   * - Datas são herdadas automaticamente do cronograma
+   * - Permite múltiplas atribuições por padrão
+   *
+   * ⚠️ Importante:
+   * Este objeto será enviado diretamente para o backend.
+   */
   const [assignmentData, setAssignmentData] = useState<AssignScheduleDTO>({
     studentIds: [],
-    startDate: getTodayAtMidnight(), // Data de hoje às 00:00
+    startDate: new Date(),
+    endDate: new Date(),
     allowMultiple: true,
     customizations: {}
   });
-  const [showFilters, setShowFilters] = useState(false);
-  const [grades, setGrades] = useState<string[]>(['all']);
-  const [schools, setSchools] = useState<string[]>(['all']);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
 
-  const isCoordinator = userRole === 'coordinator';
-
-  const calculateEngagementScore = (student: Student): number => {
-    // Pontuação baseada em múltiplos fatores
-    const streakScore = Math.min(student.profile.streak * 5, 30);
-    const pointsScore = Math.min(student.profile.totalPoints / 100, 40);
-    const levelScore = student.profile.level * 10;
-
-    return Math.min(streakScore + pointsScore + levelScore, 100);
-  };
-
-  // Na linha ~160 do componente, ajuste a função de normalização:
-  const normalizeStudents = async (students: Student[]): Promise<StudentWithStatus[]> => {
-    console.log('🔄 Normalizando lista de alunos:', students.length, 'alunos');
-
-    const normalized = await Promise.all(
-      students.map(async (student) => {
-        // Verificar se já tem cronograma ativo
-        let hasActiveInstance = false;
-        if (schedule?.id) {
-          console.log(`🔍 Verificando cronograma para aluno ${student.name} (${student.id})`);
-          hasActiveInstance = await StudentService.hasActiveSchedule(
-            student.id,
-            schedule.id
-          );
-
-          if (hasActiveInstance) {
-            console.log(`⚠️  ALUNO JÁ TEM CRONOGRAMA ATIVO: ${student.name} (${student.id})`);
-            console.log(`   Cronograma ID: ${schedule.id} | Nome: ${schedule.name}`);
-          }
-        }
-
-        const isAssigned = isCoordinator
-          ? true
-          : student.profile.assignedProfessionals?.includes(user?.id || '') || false;
-        const engagementScore = calculateEngagementScore(student);
-
-        const canBeSelected = isCoordinator || isAssigned;
-        const canReceiveSchedule = !hasActiveInstance;
-
-        return {
-          ...student,
-          hasActiveInstance,
-          canReceiveSchedule,
-          isAssignedToMe: isAssigned,
-          canBeSelected,
-          engagementScore,
-          stats: {
-            totalPoints: student.profile.totalPoints ?? 0,
-            streak: student.profile.streak ?? 0,
-            level: student.profile.level ?? 1
-          }
-        };
-      })
-    );
-
-    // Contar alunos com cronograma ativo
-    const alunosComCronograma = normalized.filter(s => s.hasActiveInstance);
-    console.log('📊 RESUMO DA NORMALIZAÇÃO:');
-    console.log(`   • Total de alunos: ${normalized.length}`);
-    console.log(`   • Alunos com cronograma ativo: ${alunosComCronograma.length}`);
-    console.log(`   • IDs dos alunos com cronograma ativo:`,
-      alunosComCronograma.map(s => ({ id: s.id, name: s.name })));
-
-    return normalized;
-  };
-
-  // Carregar dados iniciais
+  /**
+   * Sincroniza automaticamente as datas da atribuição com o cronograma carregado.
+   *
+   * Motivo:
+   * - Evita inconsistência entre cronograma e instância atribuída
+   * - Remove necessidade de input manual do usuário
+   *
+   * ⚠️ Risco:
+   * - Sempre sobrescreve datas locais ao carregar o cronograma
+   * - Alterações manuais (se existirem no futuro) seriam perdidas
+   */
   useEffect(() => {
-    const initialize = async () => {
+    if (schedule) {
+      console.group('📅 [AUTO-SYNC ATRIBUIÇÃO]');
+      console.log('📄 Cronograma:', schedule.name);
+      console.log('🕒 Aplicando Início:', schedule.startDate ? new Date(schedule.startDate).toLocaleDateString() : 'N/A');
+      console.log('🕒 Aplicando Fim:', schedule.endDate ? new Date(schedule.endDate).toLocaleDateString() : 'N/A');
+
+      setAssignmentData(prev => ({
+        ...prev,
+        startDate: schedule.startDate ? new Date(schedule.startDate) : new Date(),
+        endDate: schedule.endDate ? new Date(schedule.endDate) : new Date()
+      }));
+      console.groupEnd();
+    }
+  }, [schedule]);
+
+  useEffect(() => {
+
+    /**
+     * Inicializa o componente carregando:
+     * - dados do cronograma
+     * - lista de alunos
+     *
+     * Ordem importante:
+     * - primeiro cronograma (para validar instâncias ativas)
+     * - depois alunos (dependem do cronograma)
+     *
+     * ⚠️ Risco:
+     * - Se falhar, bloqueia toda a interface
+     */
+    const init = async () => {
       try {
         setLoading(true);
-        setError(null);
-
-        console.log('🚀 Iniciando carregamento de dados...');
-        console.log(`📅 Schedule ID: ${scheduleId}`);
-
-        await Promise.all([
-          loadScheduleData(scheduleId),
-          loadStudents()
-        ]);
-
-        console.log('✅ Dados carregados com sucesso');
-
+        // Carrega cronograma primeiro para que loadStudents possa verificar instâncias ativas
+        await loadScheduleData(scheduleId);
+        await loadStudents();
       } catch (err: any) {
-        console.error('❌ Erro ao inicializar:', err);
-        setError(err.message || 'Erro ao carregar dados');
+        console.error('❌ Erro ao inicializar Assignment:', err);
+        setError('Falha ao carregar dados do cronograma.');
       } finally {
         setLoading(false);
       }
     };
-    initialize();
+    init();
   }, [scheduleId]);
 
-  // Extrair filtros únicos
   useEffect(() => {
     if (students.length > 0) {
       const uniqueGrades = ['all', ...new Set(students.map(s => s.profile.grade).filter(Boolean))];
@@ -203,240 +142,130 @@ export default function AssignmentInterface({
     }
   }, [students]);
 
-  // Aplicar filtros
-  useEffect(() => {
-    const applyFilters = async () => {
-      console.log('🎯 Aplicando filtros...');
-      console.log('Filtros atuais:', filters);
+  /**
+   * Aplica filtros e adiciona estado derivado aos alunos.
+   *
+   * Campos derivados:
+   * - hasActiveInstance → já possui cronograma ativo
+   * - canReceiveSchedule → pode receber novo cronograma
+   * - isAssignedToMe → controle de permissão do profissional
+   *
+   * ⚠️ Regra de negócio:
+   * - Profissionais só podem atribuir alunos sob sua responsabilidade
+   * - Coordenadores podem atribuir qualquer aluno
+   */
+  const filteredStudents = useMemo((): StudentWithStatus[] => {
+    const withStatus: StudentWithStatus[] = students.map(student => ({
+      ...student,
+      hasActiveInstance: (student as any).hasActiveInstance,
+      canReceiveSchedule: !(student as any).hasActiveInstance,
+      isAssignedToMe: isCoordinator || student.profile.assignedProfessionals?.includes(user?.id || '') || false,
+    }));
 
-      const normalized = await normalizeStudents(students);
-      let filtered = [...normalized];
+    let filtered = withStatus;
 
-      // Busca
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        filtered = filtered.filter(student =>
-          student.name.toLowerCase().includes(searchLower) ||
-          student.email.toLowerCase().includes(searchLower) ||
-          student.profile.school.toLowerCase().includes(searchLower)
-        );
-        console.log(`🔎 Após busca "${filters.search}": ${filtered.length} alunos`);
-      }
-
-      // Filtros adicionais
-      if (filters.grade !== 'all') {
-        filtered = filtered.filter(student => student.profile.grade === filters.grade);
-        console.log(`📚 Após filtro série "${filters.grade}": ${filtered.length} alunos`);
-      }
-      if (filters.school !== 'all') {
-        filtered = filtered.filter(student => student.profile.school === filters.school);
-        console.log(`🏫 Após filtro escola "${filters.school}": ${filtered.length} alunos`);
-      }
-      if (filters.engagement !== 'all') {
-        filtered = filtered.filter(student => {
-          const score = student.engagementScore || 0;
-          if (filters.engagement === 'low') return score < 40;
-          if (filters.engagement === 'medium') return score >= 40 && score < 70;
-          if (filters.engagement === 'high') return score >= 70;
-          return true;
-        });
-        console.log(`🔥 Após filtro engajamento "${filters.engagement}": ${filtered.length} alunos`);
-      }
-      if (!isCoordinator && filters.assignment !== 'all') {
-        if (filters.assignment === 'assigned') {
-          filtered = filtered.filter(student => student.isAssignedToMe);
-          console.log(`👤 Após filtro "meus alunos": ${filtered.length} alunos`);
-        } else if (filters.assignment === 'unassigned') {
-          filtered = filtered.filter(student => !student.isAssignedToMe);
-          console.log(`👥 Após filtro "não atribuídos": ${filtered.length} alunos`);
-        }
-      }
-
-      // Verificar status final dos alunos filtrados
-      const alunosBloqueados = filtered.filter(s => !s.canReceiveSchedule);
-      const alunosSelecionaveis = filtered.filter(s => s.canReceiveSchedule);
-
-      console.log('📊 RESUMO FINAL DOS FILTROS:');
-      console.log(`   • Alunos filtrados: ${filtered.length}`);
-      console.log(`   • Alunos selecionáveis (sem cronograma ativo): ${alunosSelecionaveis.length}`);
-      console.log(`   • Alunos bloqueados (com cronograma ativo): ${alunosBloqueados.length}`);
-
-      if (alunosBloqueados.length > 0) {
-        console.log('🚫 ALUNOS BLOQUEADOS (com cronograma ativo):');
-        alunosBloqueados.forEach(aluno => {
-          console.log(`   • ${aluno.name} (${aluno.id})`);
-        });
-      }
-
-      setFilteredStudents(filtered);
-    };
-
-    if (students.length > 0 && schedule?.id) {
-      applyFilters();
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      filtered = filtered.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        s.profile.school?.toLowerCase().includes(q)
+      );
     }
-  }, [students, filters, isCoordinator, schedule?.id]);
+    if (filters.grade !== 'all') filtered = filtered.filter(s => s.profile.grade === filters.grade);
+    if (filters.school !== 'all') filtered = filtered.filter(s => s.profile.school === filters.school);
 
-  // Funções de manipulação (mantidas iguais)
+    return filtered;
+  }, [students, filters, isCoordinator, user?.id]);
+
   const handleStudentSelect = (studentId: string) => {
-    const student = filteredStudents.find(s => s.id === studentId);
-    if (!student) return;
-
-    if (student.hasActiveInstance) {
-      setError(`Aluno "${student.name}" já possui este cronograma ativo`);
-      return;
-    }
-
-    // Verificação mais clara:
-    if (!isCoordinator && !student.isAssignedToMe) {
-      setError('Você só pode selecionar alunos que estão sob sua responsabilidade');
-
-      // Feedback visual (opcional)
-      const studentCard = document.getElementById(`student-${studentId}`);
-      if (studentCard) {
-        studentCard.classList.add('shake-animation');
-        setTimeout(() => {
-          studentCard.classList.remove('shake-animation');
-        }, 500);
-      }
-
-      return;
-    }
-
-    setSelectedStudents(prev => {
-      const newSelection = prev.includes(studentId)
-        ? prev.filter(id => id !== studentId)
-        : [...prev, studentId];
-
-      setAssignmentData(prev => ({
-        ...prev,
-        studentIds: newSelection,
-        customizations: {
-          ...prev.customizations,
-          [studentId]: prev.customizations?.[studentId] || {}
-        }
-      }));
-
-      return newSelection;
-    });
+    setSelectedStudents(prev =>
+      prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId]
+    );
   };
 
+  /**
+   * Seleciona automaticamente todos os alunos elegíveis.
+   *
+   * Critérios:
+   * - não possuem instância ativa
+   * - pertencem ao profissional (ou usuário é coordenador)
+   *
+   * ⚠️ Impacto:
+   * - Pode selecionar muitos alunos de uma vez
+   */
   const handleSelectAllAvailable = () => {
-    const availableStudents = filteredStudents
-      .filter(s => {
-        if (!s.canReceiveSchedule) return false;
-        if (!isCoordinator && !s.isAssignedToMe) return false;
-        return true;
-      })
+    const available = filteredStudents
+      .filter(s => s.canReceiveSchedule && (isCoordinator || s.isAssignedToMe))
       .map(s => s.id);
-
-    setSelectedStudents(availableStudents);
-    setAssignmentData(prev => ({
-      ...prev,
-      studentIds: availableStudents,
-      customizations: availableStudents.reduce((acc, studentId) => ({
-        ...acc,
-        [studentId]: prev.customizations?.[studentId] || {}
-      }), {})
-    }));
+    setSelectedStudents(available);
   };
 
-  const handleDeselectAll = () => {
-    setSelectedStudents([]);
-    setAssignmentData(prev => ({
-      ...prev,
-      studentIds: [],
-      customizations: {}
-    }));
-  };
+  const handleDeselectAll = () => setSelectedStudents([]);
 
-  const handleCustomizationToggle = (studentId: string, activityId: string) => {
-    setAssignmentData(prev => {
-      const currentCustomizations = prev.customizations?.[studentId] || {};
-      const currentExcluded = currentCustomizations.excludedActivities || [];
-
-      const newExcluded = currentExcluded.includes(activityId)
-        ? currentExcluded.filter(id => id !== activityId)
-        : [...currentExcluded, activityId];
-
-      return {
-        ...prev,
-        customizations: {
-          ...prev.customizations,
-          [studentId]: {
-            ...currentCustomizations,
-            excludedActivities: newExcluded
-          }
-        }
-      };
-    });
-  };
-
+  /**
+   * Executa a atribuição do cronograma.
+   *
+   * Fluxo:
+   * 1. Valida seleção
+   * 2. Monta payload final
+   * 3. Envia para backend
+   * 4. Trata sucesso parcial ou total
+   *
+   * ⚠️ POSSÍVEL CENÁRIO:
+   * - Parte dos alunos pode falhar
+   * - Parte pode ter sucesso
+   *
+   * Isso gera o estado de `partialResult`
+   *
+   * ⚠️ Side effects:
+   * - criação de múltiplas scheduleInstances
+   */
   const handleSubmit = async () => {
     if (selectedStudents.length === 0) {
       setError('Selecione pelo menos um aluno');
       return;
     }
 
-    if (!assignmentData.startDate) {
-      setError('Selecione uma data de início');
-      return;
-    }
+    console.group('🚀 [SUBMIT ATRIBUIÇÃO]');
+    console.log('📊 Alunos:', selectedStudents.length);
+    console.log('📅 Início:', assignmentData.startDate.toLocaleDateString());
+    console.log('📅 Fim:', assignmentData.endDate?.toLocaleDateString());
 
     try {
       setError(null);
-      await assignSchedule(scheduleId, assignmentData);
-      if (onSuccess) onSuccess();
+      setPartialResult(null);
+      const finalPayload: AssignScheduleDTO = {
+        ...assignmentData,
+        studentIds: selectedStudents
+      };
+
+      const result = await assignSchedule(scheduleId, finalPayload);
+      console.log('✅ Resultado:', result);
+
+      if (result.failed.length > 0) {
+        setPartialResult({ ok: result.successful.length, failed: result.failed });
+        if (result.successful.length > 0 && onSuccess) onSuccess();
+      } else {
+        if (onSuccess) onSuccess();
+      }
     } catch (err: any) {
+      console.error('❌ Erro no Submit:', err);
       setError(err.message || 'Erro ao atribuir cronograma');
+    } finally {
+      console.groupEnd();
     }
   };
 
-  // Componente de Loading
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <div className="relative">
-          <div className="w-20 h-20 border-4 border-indigo-100 rounded-full"></div>
-          <div className="absolute top-0 left-0 w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-        <p className="mt-6 text-gray-600 font-medium">Carregando dados do cronograma...</p>
-        <p className="text-sm text-gray-500 mt-2">Preparando interface de atribuição</p>
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center py-16">
+      <div className="relative">
+        <div className="w-20 h-20 border-4 border-indigo-100 rounded-full" />
+        <div className="absolute top-0 left-0 w-20 h-20 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
-    );
-  }
-
-  // Componente de Erro
-  if (error && !loadingStudents) {
-    return (
-      <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-2xl p-8">
-        <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-          <div className="flex-shrink-0">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-              <FaExclamationTriangle className="w-8 h-8 text-red-600" />
-            </div>
-          </div>
-          <div className="flex-1 text-center md:text-left">
-            <h3 className="text-lg font-semibold text-red-800 mb-2">Erro ao carregar dados</h3>
-            <p className="text-red-700 mb-4">{error}</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={() => window.location.reload()}
-                className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-medium"
-              >
-                Tentar novamente
-              </button>
-              <button
-                onClick={onCancel}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+      <p className="mt-4 text-gray-600 font-medium">Carregando alunos e vigências...</p>
+    </div>
+  );
 
   return (
     <div className="space-y-8">
@@ -447,11 +276,10 @@ export default function AssignmentInterface({
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-3">
                 <div className={`p-3 rounded-xl ${isCoordinator ? 'bg-gradient-to-r from-purple-100 to-pink-100' : 'bg-gradient-to-r from-indigo-100 to-blue-100'}`}>
-                  {isCoordinator ? (
-                    <FaGlobe className="w-6 h-6 text-purple-600" />
-                  ) : (
-                    <FaUsers className="w-6 h-6 text-indigo-600" />
-                  )}
+                  {isCoordinator
+                    ? <FaGlobe className="w-6 h-6 text-purple-600" />
+                    : <FaUsers className="w-6 h-6 text-indigo-600" />
+                  }
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">
@@ -467,13 +295,11 @@ export default function AssignmentInterface({
                 <div className="flex flex-wrap gap-4 mt-4">
                   <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full">
                     <FaCalendarAlt className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm font-medium text-gray-700">{schedule.metadata.totalActivities} atividades</span>
+                    <span className="text-sm font-medium text-gray-700">{schedule.metadata?.totalActivities} atividades</span>
                   </div>
                   <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full">
                     <FaClock className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm font-medium text-gray-700">
-                      {schedule.metadata.estimatedWeeklyHours}h semanais
-                    </span>
+                    <span className="text-sm font-medium text-gray-700">{schedule.metadata?.estimatedWeeklyHours}h semanais</span>
                   </div>
                   <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full">
                     <FaChartBar className="w-4 h-4 text-gray-600" />
@@ -486,32 +312,30 @@ export default function AssignmentInterface({
               )}
             </div>
 
-            {isCoordinator ? (
-              <div className="flex-shrink-0">
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full font-medium">
-                  <FaShieldAlt className="w-4 h-4" />
-                  Modo Coordenador
-                </span>
-                <p className="text-sm text-gray-500 mt-2 text-center">
-                  Acesso completo à plataforma
-                </p>
-              </div>
-            ) : (
-              <div className="flex-shrink-0">
-                <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-full font-medium">
-                  <FaUserTie className="w-4 h-4" />
-                  Modo Profissional
-                </span>
-                <p className="text-sm text-gray-500 mt-2 text-center">
-                  Alunos atribuídos a você
-                </p>
-              </div>
-            )}
+            <div className="flex-shrink-0 text-center">
+              {isCoordinator ? (
+                <>
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full font-medium">
+                    <FaShieldAlt className="w-4 h-4" />
+                    Modo Coordenador
+                  </span>
+                  <p className="text-sm text-gray-500 mt-2">Acesso completo à plataforma</p>
+                </>
+              ) : (
+                <>
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-full font-medium">
+                    <FaUserTie className="w-4 h-4" />
+                    Modo Profissional
+                  </span>
+                  <p className="text-sm text-gray-500 mt-2">Alunos atribuídos a você</p>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Painel de Filtros Avançados */}
+      {/* Painel de Filtros e Busca */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -520,9 +344,7 @@ export default function AssignmentInterface({
                 <TbFilter className="w-5 h-5 text-indigo-600" />
                 Filtros e Busca
               </h3>
-              <p className="text-gray-600 text-sm mt-1">
-                Encontre alunos específicos usando filtros avançados
-              </p>
+              <p className="text-gray-600 text-sm mt-1">Encontre alunos específicos usando filtros avançados</p>
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -534,163 +356,77 @@ export default function AssignmentInterface({
           </div>
         </div>
 
-        <div className={`p-6 ${showFilters ? 'block' : 'hidden'}`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Busca */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <FaSearch className="inline mr-2" />
-                Buscar Alunos
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={filters.search}
-                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Nome, email ou escola..."
-                />
-                <FaSearch className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
+        {showFilters && (
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <FaSearch className="inline mr-2" />Buscar Alunos
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="Nome, email ou escola..."
+                  />
+                  <FaSearch className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <FaGraduationCap className="inline mr-2" />Série/Ano
+                </label>
+                <select
+                  value={filters.grade}
+                  onChange={e => setFilters(prev => ({ ...prev, grade: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {grades.map(grade => (
+                    <option key={grade} value={grade}>{grade === 'all' ? 'Todas as séries' : `Série ${grade}`}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <FaSchool className="inline mr-2" />Escola
+                </label>
+                <select
+                  value={filters.school}
+                  onChange={e => setFilters(prev => ({ ...prev, school: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {schools.map(school => (
+                    <option key={school} value={school}>{school === 'all' ? 'Todas as escolas' : school}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {/* Filtro por série */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <FaGraduationCap className="inline mr-2" />
-                Série/Ano
-              </label>
-              <select
-                value={filters.grade}
-                onChange={(e) => setFilters(prev => ({ ...prev, grade: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                onClick={handleSelectAllAvailable}
+                disabled={filteredStudents.length === 0}
+                className="px-5 py-3 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity font-medium flex items-center gap-2"
               >
-                {grades.map(grade => (
-                  <option key={grade} value={grade}>
-                    {grade === 'all' ? 'Todas as séries' : `Série ${grade}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro por escola */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <FaSchool className="inline mr-2" />
-                Escola
-              </label>
-              <select
-                value={filters.school}
-                onChange={(e) => setFilters(prev => ({ ...prev, school: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                <FaCheck className="w-4 h-4" />
+                Selecionar Todos Disponíveis
+              </button>
+              <button
+                onClick={handleDeselectAll}
+                className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
               >
-                {schools.map(school => (
-                  <option key={school} value={school}>
-                    {school === 'all' ? 'Todas as escolas' : school}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro por engajamento */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <FaFire className="inline mr-2" />
-                Nível de Engajamento
-              </label>
-              <select
-                value={filters.engagement}
-                onChange={(e) => setFilters(prev => ({ ...prev, engagement: e.target.value }))}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="all">Todos os níveis</option>
-                <option value="high">Alto engajamento</option>
-                <option value="medium">Engajamento médio</option>
-                <option value="low">Baixo engajamento</option>
-              </select>
+                Limpar Seleção
+              </button>
             </div>
           </div>
-
-          {/* Filtro por atribuição (condicional) */}
-          {!isCoordinator && (
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <FaUserTie className="inline mr-2" />
-                Atribuição
-              </label>
-              <select
-                value={filters.assignment}
-                onChange={(e) => setFilters(prev => ({ ...prev, assignment: e.target.value }))}
-                className="w-full md:w-64 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="all">Todos os alunos</option>
-                <option value="assigned">Meus alunos</option>
-                <option value="unassigned">Não atribuídos a mim</option>
-              </select>
-            </div>
-          )}
-
-          {/* Contadores e Estatísticas */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="flex flex-wrap gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">{filteredStudents.length}</div>
-                <div className="text-sm text-gray-600">Alunos filtrados</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-indigo-600">{selectedStudents.length}</div>
-                <div className="text-sm text-gray-600">Selecionados</div>
-              </div>
-              {!isCoordinator && (
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {filteredStudents.filter(s => s.isAssignedToMe).length}
-                  </div>
-                  <div className="text-sm text-gray-600">Meus alunos</div>
-                </div>
-              )}
-              <div className="text-center">
-                <div className="text-2xl font-bold text-amber-600">
-                  {filteredStudents.filter(s => s.hasActiveInstance).length}
-                </div>
-                <div className="text-sm text-gray-600">Com cronograma ativo</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-emerald-600">
-                  {Math.round(filteredStudents.reduce((acc, s) => acc + (s.engagementScore || 0), 0) / filteredStudents.length) || 0}%
-                </div>
-                <div className="text-sm text-gray-600">Engajamento médio</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ações em Lote */}
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              onClick={handleSelectAllAvailable}
-              disabled={loadingStudents || filteredStudents.length === 0}
-              className="px-5 py-3 bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity font-medium flex items-center gap-2"
-            >
-              <FaCheck className="w-4 h-4" />
-              Selecionar Todos Disponíveis
-            </button>
-            <button
-              onClick={handleDeselectAll}
-              className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-            >
-              Limpar Seleção
-            </button>
-            <div className="ml-auto">
-              <span className="text-sm text-gray-500">
-                <FaFire className="inline mr-1 w-3 h-3" />
-                Dica: Filtre por engajamento para priorizar alunos
-              </span>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Lista de Alunos com Cards */}
+      {/* Lista de Alunos */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Alunos Disponíveis</h3>
@@ -702,21 +438,14 @@ export default function AssignmentInterface({
         </div>
 
         <div className="p-6">
-          {loadingStudents ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-              <p className="mt-3 text-gray-600">Carregando lista de alunos...</p>
-            </div>
-          ) : filteredStudents.length === 0 ? (
+          {filteredStudents.length === 0 ? (
             <div className="text-center py-16">
               <div className="inline-flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full mb-6">
                 <FaUser className="w-10 h-10 text-gray-400" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                Nenhum aluno encontrado
-              </h3>
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">Nenhum aluno encontrado</h3>
               <p className="text-gray-500 max-w-md mx-auto">
-                {filters.search || filters.grade !== 'all' || filters.school !== 'all' || filters.engagement !== 'all'
+                {filters.search || filters.grade !== 'all' || filters.school !== 'all'
                   ? 'Tente ajustar os filtros para encontrar mais alunos.'
                   : isCoordinator
                     ? 'Nenhum aluno cadastrado no sistema. Adicione alunos primeiro.'
@@ -724,7 +453,7 @@ export default function AssignmentInterface({
               </p>
               {(filters.search || filters.grade !== 'all' || filters.school !== 'all') && (
                 <button
-                  onClick={() => setFilters({ search: '', grade: 'all', school: 'all', assignment: 'all', engagement: 'all' })}
+                  onClick={() => setFilters({ search: '', grade: 'all', school: 'all' })}
                   className="mt-4 px-4 py-2 text-indigo-600 hover:text-indigo-800 font-medium"
                 >
                   Limpar todos os filtros
@@ -734,105 +463,107 @@ export default function AssignmentInterface({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredStudents.map(student => {
-                const engagementScore = student.engagementScore || 0;
-                const engagementColor = engagementScore >= 70 ? 'emerald' :
-                  engagementScore >= 40 ? 'amber' : 'rose';
-
-                // VERIFICAÇÃO CRÍTICA: Se pode ser selecionado
+                const isSelected = selectedStudents.includes(student.id);
                 const canBeSelected = isCoordinator || student.isAssignedToMe;
 
                 return (
                   <div
                     key={student.id}
-                    className={`group relative bg-gradient-to-br from-white to-gray-50 border rounded-2xl p-4 transition-all duration-300 hover:shadow-lg ${selectedStudents.includes(student.id)
-                      ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
-                      : 'border-gray-200'
-                      } ${!canBeSelected ? 'opacity-70' : 'hover:border-indigo-200'}`}
+                    onClick={() => canBeSelected && handleStudentSelect(student.id)}
+                    className={`group relative bg-gradient-to-br from-white to-gray-50 border rounded-2xl p-4 transition-all duration-300 hover:shadow-lg ${
+                      isSelected
+                        ? 'border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100'
+                        : 'border-gray-200'
+                    } ${canBeSelected ? 'cursor-pointer hover:border-indigo-200' : 'opacity-70'}`}
                   >
-                    {/* Checkbox - SEMPRE VISÍVEL */}
-                    <div className="absolute top-4 right-4 z-10"> {/* ← Adicionado z-10 */}
+                    <div className="absolute top-4 right-4 z-10">
                       <input
+                      
+                      /**
+                       * Validação de permissão no nível da UI.
+                       *
+                       * ⚠️ IMPORTANTE:
+                       * Isso NÃO substitui validação no backend.
+                       *
+                       * Apenas evita interação indevida na interface.
+                       */
                         type="checkbox"
-                        checked={selectedStudents.includes(student.id)}
+                        checked={isSelected}
                         onChange={() => {
                           if (!canBeSelected) {
-                            setError('Você só pode selecionar alunos que estão sob sua responsabilidade');
+                            setError('Você só pode selecionar alunos sob sua responsabilidade');
                             return;
                           }
                           handleStudentSelect(student.id);
                         }}
-                        disabled={!student.canReceiveSchedule || !canBeSelected}
-                        className={`h-5 w-5 rounded border-gray-300 focus:ring-2 focus:ring-indigo-500 ${selectedStudents.includes(student.id)
-                          ? 'text-indigo-600 border-indigo-600'
-                          : ''
-                          } ${!canBeSelected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                        disabled={!canBeSelected}
+                        className={`h-5 w-5 rounded border-gray-300 focus:ring-2 focus:ring-indigo-500 ${
+                          isSelected ? 'text-indigo-600 border-indigo-600' : ''
+                        } ${!canBeSelected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                       />
                     </div>
 
-                    {/* Avatar e Informações Básicas */}
                     <div className="flex items-start gap-4 mb-4">
-                      <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center ${student.isAssignedToMe
-                        ? 'bg-gradient-to-br from-indigo-100 to-blue-100'
-                        : 'bg-gray-100'
-                        }`}>
-                        <FaUser className={`w-7 h-7 ${student.isAssignedToMe ? 'text-indigo-600' : 'text-gray-600'
-                          }`} />
+                      <div className={`flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center ${
+                        student.isAssignedToMe ? 'bg-gradient-to-br from-indigo-100 to-blue-100' : 'bg-gray-100'
+                      }`}>
+                        <FaUser className={`w-7 h-7 ${student.isAssignedToMe ? 'text-indigo-600' : 'text-gray-600'}`} />
                       </div>
 
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 pr-8">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-bold text-gray-900 truncate">
-                            {student.name}
-                          </h4>
+                          <h4 className="font-bold text-gray-900 truncate">{student.name}</h4>
+                          
+                          /**
+                           * Indica que o aluno já possui um cronograma ativo.
+                           *
+                           * ⚠️ Regra:
+                           * - pode impedir nova atribuição dependendo da lógica do backend
+                           */
                           {student.hasActiveInstance && (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-full flex-shrink-0">
                               <FaExclamationTriangle className="w-3 h-3" />
                               Ativo
                             </span>
                           )}
                         </div>
 
-                        <p className="text-sm text-gray-600 truncate mb-2">
-                          {student.email}
-                        </p>
+                        <p className="text-sm text-gray-600 truncate mb-2">{student.email}</p>
 
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <FaSchool className="w-3 h-3" />
-                            {student.profile.school}
-                          </span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <FaGraduationCap className="w-3 h-3" />
-                            {student.profile.grade}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Indicador de Status de Atribuição */}
-                    {!student.isAssignedToMe && (
-                      <div className="mt-3">
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">
-                          <FaUserTie className="w-3 h-3" />
-                          {isCoordinator ? 'Não atribuído a você' : 'Não está sob sua responsabilidade'}
-                          {isCoordinator && (
-                            <span className="ml-1 text-gray-500 text-xs">
-                              (pode atribuir como coordenador)
+                        <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                          {student.profile.school && (
+                            <span className="flex items-center gap-1">
+                              <FaSchool className="w-3 h-3" />
+                              {student.profile.school}
                             </span>
+                          )}
+                          {student.profile.grade && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <FaGraduationCap className="w-3 h-3" />
+                                {student.profile.grade}
+                              </span>
+                            </>
                           )}
                         </div>
                       </div>
-                    )}
-
-                    {/* MENSAGEM DE ALERTA (apenas para profissionais quando aluno não está atribuído) */}
+                    </div>
+                    /**
+                     * Regra de permissão:
+                     *
+                     * - Coordenador → acesso total
+                     * - Profissional → apenas alunos atribuídos
+                     *
+                     * ⚠️ Segurança:
+                     * Deve ser validado também no backend
+                     */
                     {!isCoordinator && !student.isAssignedToMe && (
                       <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                         <p className="text-xs text-amber-800 flex items-start gap-2">
                           <FaExclamationTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
                           <span>
-                            Este aluno não está sob sua responsabilidade.
-                            <br />
+                            Este aluno não está sob sua responsabilidade.{' '}
                             <span className="font-medium">Apenas coordenadores podem atribuir.</span>
                           </span>
                         </p>
@@ -846,266 +577,75 @@ export default function AssignmentInterface({
         </div>
       </div>
 
-      {/* Configurações de Atribuição 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <FaLayerGroup className="w-5 h-5 text-indigo-600" />
-            Configurações de Atribuição
-          </h3>
+      {/* Footer Ações */}
+      <div className="flex flex-col sm:flex-row items-center justify-between bg-white border border-gray-200 p-6 rounded-2xl shadow-xl gap-4">
+        <div className="flex items-center gap-2 text-gray-600">
+          <FaUsers className="text-gray-400" />
+          <span className="font-bold text-gray-900">{selectedStudents.length}</span> alunos selecionados
         </div>
-
-        <div className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                <FaCalendarPlus className="inline mr-2" />
-                Data de Início do Cronograma
-              </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={assignmentData.startDate.toISOString().split('T')[0]}
-                  onChange={(e) => setAssignmentData(prev => ({
-                    ...prev,
-                    startDate: new Date(e.target.value)
-                  }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  min={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-            </div>
-
-            Configurações Adicionais 
-            <div className="space-y-6">
-              <div className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-indigo-800">Alunos selecionados</div>
-                    <div className="text-2xl font-bold text-indigo-900">{selectedStudents.length}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium text-indigo-800">Status</div>
-                    <div className={`text-sm font-medium ${selectedStudents.length === 0 ? 'text-amber-600' : 'text-emerald-600'
-                      }`}>
-                      {selectedStudents.length === 0 ? 'Nenhum selecionado' : 'Pronto para atribuir'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>*/}
-
-      {/* Feedback e Mensagens */}
-      {!isCoordinator && selectedStudents.some(studentId => {
-        const student = filteredStudents.find(s => s.id === studentId);
-        return student && !student.isAssignedToMe;
-      }) && (
-          <div className="animate-in fade-in slide-in-from-bottom-4">
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                    <FaExclamationTriangle className="w-6 h-6 text-amber-600" />
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-amber-800 text-lg mb-1">
-                    Permissões Insuficientes
-                  </h4>
-                  <p className="text-amber-700 mb-3">
-                    Você selecionou alunos que não estão sob sua responsabilidade.
-                    Apenas coordenadores podem atribuir cronogramas para alunos não atribuídos.
-                  </p>
-                  <button
-                    onClick={() => {
-                      const validStudents = selectedStudents.filter(studentId => {
-                        const student = filteredStudents.find(s => s.id === studentId);
-                        return student && student.isAssignedToMe;
-                      });
-                      setSelectedStudents(validStudents);
-                    }}
-                    className="px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors text-sm font-medium"
-                  >
-                    Remover alunos não atribuídos
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-      {/* Resultado da Atribuição */}
-      {result && (
-        <div className={`animate-in fade-in slide-in-from-bottom-4 rounded-2xl p-8 ${result.failed.length === 0
-          ? 'bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200'
-          : 'bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200'
-          }`}>
-          <div className="flex items-start gap-4 mb-6">
-            {result.failed.length === 0 ? (
-              <div className="flex-shrink-0">
-                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
-                  <FaCheck className="w-8 h-8 text-emerald-600" />
-                </div>
-              </div>
-            ) : (
-              <div className="flex-shrink-0">
-                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
-                  <FaExclamationTriangle className="w-8 h-8 text-amber-600" />
-                </div>
-              </div>
-            )}
-            <div className="flex-1">
-              <h3 className="text-xl font-bold mb-2">
-                {result.failed.length === 0
-                  ? '✅ Atribuição Concluída com Sucesso!'
-                  : '⚠️ Atribuição Parcialmente Concluída'}
-              </h3>
-              <p className="text-gray-700">
-                {result.failed.length === 0
-                  ? 'Todos os alunos selecionados receberam o cronograma com sucesso.'
-                  : 'Alguns alunos não puderam receber o cronograma. Veja os detalhes abaixo.'}
-              </p>
-            </div>
-          </div>
-
-          {result.successful.length > 0 && (
-            <div className="mb-6">
-              <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <FaCheck className="w-4 h-4 text-emerald-600" />
-                <span>{result.successful.length} aluno(s) atribuído(s) com sucesso:</span>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {result.successful.slice(0, 6).map(item => {
-                  const student = students.find(s => s.id === item.studentId);
-                  return (
-                    <div key={item.studentId} className="bg-white/50 rounded-xl p-4 border border-gray-200">
-                      <div className="font-medium text-gray-900">{student?.name || 'Aluno'}</div>
-                      <div className="text-sm text-gray-600 mt-1">{student?.email}</div>
-                    </div>
-                  );
-                })}
-                {result.successful.length > 6 && (
-                  <div className="bg-white/50 rounded-xl p-4 border border-gray-200 flex items-center justify-center">
-                    <span className="text-gray-600">+{result.successful.length - 6} alunos</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {result.failed.length > 0 && (
-            <div>
-              <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <FaExclamationTriangle className="w-4 h-4 text-amber-600" />
-                <span>{result.failed.length} aluno(s) falharam na atribuição:</span>
-              </h4>
-              <div className="space-y-3">
-                {result.failed.map(item => {
-                  const student = students.find(s => s.id === item.studentId);
-                  return (
-                    <div key={item.studentId} className="bg-white/50 rounded-xl p-4 border border-amber-200">
-                      <div className="font-medium text-amber-800">{student?.name || item.studentId}</div>
-                      <div className="text-sm text-amber-700 mt-1">{item.error}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="flex justify-between items-center">
-              <button
-                onClick={clearResult}
-                className="text-sm text-gray-600 hover:text-gray-800 font-medium"
-              >
-                Limpar resultado
-              </button>
-              <button
-                onClick={() => refreshStudents()}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium"
-              >
-                Atualizar lista
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mensagens de Erro */}
-      {error && !result && (
-        <div className="animate-in fade-in slide-in-from-bottom-4">
-          <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200 rounded-2xl p-6">
-            <div className="flex items-start gap-4">
-              <FaExclamationTriangle className="w-6 h-6 text-red-600 mt-1" />
-              <div>
-                <h4 className="font-semibold text-red-800 mb-1">Erro na Atribuição</h4>
-                <p className="text-red-700">{error}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Ações Finais */}
-      <div className="bottom-6 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-2xl shadow-xl p-6">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            {onCancel && (
-              <button
-                onClick={onCancel}
-                className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium hover:border-gray-400"
-                disabled={assigning}
-              >
-                Cancelar
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:block text-right">
-              <div className="text-sm text-gray-600">
-                {selectedStudents.length} aluno(s) selecionado(s)
-              </div>
-              <div className="text-xs text-gray-500">
-                {activities.length} atividades cada
-              </div>
-            </div>
-
+        <div className="flex gap-3 w-full sm:w-auto">
+          {onCancel && (
             <button
-              onClick={handleSubmit}
-              disabled={assigning || selectedStudents.length === 0}
-              className={`px-8 py-4 rounded-xl font-bold transition-all flex items-center gap-3 ${assigning
-                ? 'opacity-70 cursor-not-allowed'
-                : 'hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]'
-                } ${isCoordinator
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
-                  : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white'
-                }`}
+              onClick={onCancel}
+              disabled={assigning}
+              className="flex-1 sm:flex-none px-6 py-3 text-gray-600 font-bold hover:bg-gray-50 rounded-xl transition-colors"
             >
-              {assigning ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Atribuindo...
-                </>
-              ) : (
-                <>
-                  {isCoordinator ? <FaGlobe className="w-5 h-5" /> : <FaCheck className="w-5 h-5" />}
-                  <span>
-                    Atribuir Cronograma
-                    <span className="block text-sm font-normal opacity-90">
-                      {selectedStudents.length} aluno(s) selecionado(s)
-                    </span>
-                  </span>
-                </>
-              )}
+              Cancelar
             </button>
-          </div>
+          )}
+          <button
+            onClick={handleSubmit}
+            disabled={assigning || selectedStudents.length === 0}
+            className="flex-1 sm:flex-none bg-indigo-600 text-white px-10 py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg shadow-indigo-100"
+          >
+            {assigning ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Atribuindo...</span>
+              </>
+            ) : (
+              'Confirmar Atribuição'
+            )}
+          </button>
         </div>
       </div>
+      
+      /**
+       * Exibe resultado parcial da operação.
+       *
+       * Cenário:
+       * - Alguns alunos foram atribuídos com sucesso
+       * - Outros falharam
+       *
+       * ⚠️ Importante:
+       * - Não bloqueia o sucesso total
+       * - Mantém feedback granular para o usuário
+       */
+      {partialResult && partialResult.failed.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2 text-amber-800 font-bold">
+            <FaExclamationTriangle className="flex-shrink-0" />
+            <span>
+              {partialResult.ok > 0
+                ? `${partialResult.ok} atribuído(s) com sucesso, mas ${partialResult.failed.length} falhou:`
+                : `Falha ao atribuir ${partialResult.failed.length} aluno(s):`}
+            </span>
+          </div>
+          <ul className="text-sm text-amber-700 space-y-1 pl-6 list-disc">
+            {partialResult.failed.map(f => {
+              const student = students.find(s => s.id === f.studentId);
+              return <li key={f.studentId}>{student?.name || f.studentId}: {f.error}</li>;
+            })}
+          </ul>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-3 text-red-600 font-bold text-sm bg-red-50 p-4 rounded-xl border border-red-100 animate-in fade-in slide-in-from-top-2">
+          <FaExclamationTriangle className="flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
     </div>
   );
 }

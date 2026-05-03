@@ -1,7 +1,7 @@
 // components/student/StudentDashboard.tsx - VERSÃO RESPONSIVA
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import TodayActivities from './TodayActivities';
 import { useStudentSchedule } from '@/hooks/useStudentSchedule';
 import {
@@ -11,15 +11,19 @@ import {
   FaChartLine,
   FaCheckCircle,
   FaCrown,
-  FaCalendar,
-  FaBook,
   FaBell,
   FaArrowRight,
+  FaClock,
+  FaChartBar,
   FaLightbulb,
-  FaClock
+  FaBook,
+  FaCalendar
 } from 'react-icons/fa';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import SubjectBarChart, { computeSubjectStats } from '@/components/charts/SubjectBarChart';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { firestore, auth } from '@/firebase/config';
 
 interface StudentDashboardProps {
   showHeader?: boolean;
@@ -28,14 +32,56 @@ interface StudentDashboardProps {
 export default function StudentDashboard({ showHeader = true }: StudentDashboardProps) {
   const { user } = useAuth();
   const student = user?.role === 'student' ? user : null;
-  
+
+  const [liveProfileStats, setLiveProfileStats] = useState({
+    totalPoints: 0,
+    streak: 0,
+    level: 1,
+  });
+
+  useEffect(() => {
+    // Usa o UID do Firebase Auth diretamente — mais confiável que user.id
+    // (user.id pode ser sobrescrito pelo spread de processedData em UserService.getUser)
+    const uid = auth.currentUser?.uid ?? user?.id;
+    if (!uid) return;
+
+    const ref = doc(firestore, 'students', uid);
+
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      const rawData = snap.data();
+
+      console.log('[STUDENT_DASHBOARD_PROFILE_STATS]', {
+        uid,
+        exists: snap.exists(),
+        rawData,
+        profile: rawData?.profile,
+        totalPoints: rawData?.profile?.totalPoints,
+        streak: rawData?.profile?.streak,
+        level: rawData?.profile?.level,
+      });
+
+      if (!snap.exists()) return;
+
+      const profile = rawData?.profile ?? {};
+
+      setLiveProfileStats({
+        totalPoints: Number(profile.totalPoints ?? 0),
+        streak: Number(profile.streak ?? 0),
+        level: Number(profile.level ?? 1),
+      });
+    }, (error) => {
+      console.error('[STUDENT_DASHBOARD_PROFILE_STATS_ERROR]', error);
+    });
+
+    return () => unsubscribe();
+  }, [user?.id]);
+
   const {
-    todayActivities,
+    weekActivities,
     instances,
     loading,
     error,
     refresh,
-    totalTodayActivities
   } = useStudentSchedule();
 
   const [todaysDate] = useState(new Date());
@@ -52,15 +98,62 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
 
   const getGreeting = () => {
     const hour = new Date().getHours();
+
     if (hour < 12) return 'Bom dia';
     if (hour < 18) return 'Boa tarde';
+
     return 'Boa noite';
   };
 
-  // Estatísticas calculadas
-  const completedToday = todayActivities.filter(a => a.status === 'completed').length;
-  const pendingToday = todayActivities.filter(a => a.status === 'pending').length;
-  const completionRate = totalTodayActivities > 0 ? Math.round((completedToday / totalTodayActivities) * 100) : 0;
+  // Usa a mesma referência de dia da tela /student/schedules:
+  // JS getDay(): 0=Domingo, 1=Segunda, ..., 6=Sábado.
+  // Não usa scheduledDate aqui porque os dados antigos podem ter offset de data.
+  const dashboardTodayActivities = useMemo(() => {
+    const selectedDay = new Date().getDay();
+    const seen = new Set<string>();
+
+    return weekActivities.filter(activity => {
+      if (activity.dayOfWeek !== selectedDay) return false;
+
+      // Deduplicação leve para evitar exibir a mesma atividade quando há instâncias repetidas.
+      // Prioriza activityId; se não existir, tenta id do snapshot; por último, usa uma chave semântica.
+      const key =
+        activity.activityId ||
+        activity.activitySnapshot?.id ||
+        `${activity.activitySnapshot?.title}-${activity.dayOfWeek}-${activity.activitySnapshot?.type}`;
+
+      if (seen.has(key)) return false;
+
+      seen.add(key);
+      return true;
+    });
+  }, [weekActivities]);
+
+  // Progresso semanal — alimenta o card "Progresso Semanal" no header
+  const weeklyTotal = weekActivities.length;
+  const weeklyCompleted = weekActivities.filter(a => a.status === 'completed').length;
+  const weeklyRate = weeklyTotal > 0 ? Math.round((weeklyCompleted / weeklyTotal) * 100) : 0;
+
+  // Progresso do dia — card diário
+  const totalTodayActivities = dashboardTodayActivities.length;
+
+  const completedToday = dashboardTodayActivities.filter(
+    activity => activity.status === 'completed'
+  ).length;
+
+  const pendingToday = dashboardTodayActivities.filter(
+    activity =>
+      activity.status === 'pending' ||
+      activity.status === 'in_progress'
+  ).length;
+
+  const completionRate =
+    totalTodayActivities > 0
+      ? Math.round((completedToday / totalTodayActivities) * 100)
+      : 0;
+
+  // Gráfico de matérias: atividades concluídas da semana agrupadas por matéria
+  const subjectStats = useMemo(() => computeSubjectStats(weekActivities || []), [weekActivities]);
 
   const getMotivationalMessage = () => {
     const messages = [
@@ -70,6 +163,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
       "Hoje é um ótimo dia para aprender! 📚",
       "Seu progresso é inspirador! 🌟"
     ];
+
     return messages[Math.floor(Math.random() * messages.length)];
   };
 
@@ -122,7 +216,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
               </h1>
               <p className="text-indigo-100 text-sm md:text-base">{getMotivationalMessage()}</p>
             </div>
-            
+
             <div className="flex items-center gap-2 text-indigo-100 text-xs md:text-sm">
               <FaCalendarDay className="w-3 h-3 md:w-4 md:h-4" />
               <span className="font-medium">{formatDate(todaysDate)}</span>
@@ -137,7 +231,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                   <FaTrophy className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{student?.profile.totalPoints || 0}</div>
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{liveProfileStats.totalPoints}</div>
                   <div className="text-xs md:text-sm text-white/90 truncate">Pontos Totais</div>
                 </div>
               </div>
@@ -149,7 +243,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                   <FaFire className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{student?.profile.streak || 0}</div>
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{liveProfileStats.streak}</div>
                   <div className="text-xs md:text-sm text-white/90 truncate">Dias Seguidos</div>
                 </div>
               </div>
@@ -161,7 +255,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                   <FaChartLine className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">Nível {student?.profile.level || 1}</div>
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">Nível {liveProfileStats.level}</div>
                   <div className="text-xs md:text-sm text-white/90 truncate">Seu Nível</div>
                 </div>
               </div>
@@ -173,12 +267,13 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                   <FaCheckCircle className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{completionRate}%</div>
-                  <div className="text-xs md:text-sm text-white/90 truncate">Hoje</div>
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold truncate">{weeklyRate}%</div>
+                  <div className="text-xs md:text-sm text-white/90 truncate">Progresso Semanal</div>
+                  <div className="text-xs text-white/70 truncate">{weeklyCompleted}/{weeklyTotal} atividades</div>
                 </div>
               </div>
             </div>
-          </div> 
+          </div>
         </div>
       )}
 
@@ -235,43 +330,24 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <FaClock className="w-3 h-3 md:w-4 md:h-4" />
                       <span className="font-medium">
-                        {todayActivities.reduce((total, a) => total + a.activitySnapshot.metadata.estimatedDuration, 0)} min total
+                        {dashboardTodayActivities.reduce((total, a) => total + (a.activitySnapshot?.metadata?.estimatedDuration || 0), 0)} min total
                       </span>
                     </div>
                   </div>
                   <div className="w-full h-2 md:h-3 bg-slate-200 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500"
                       style={{ width: `${completionRate}%` }}
                     />
                   </div>
                 </div>
 
-                {/* Componente TodayActivities mantido */}
                 <div>
                   <TodayActivities
-                    activities={todayActivities}
+                    activities={dashboardTodayActivities}
                     onActivityUpdate={refresh}
                   />
                 </div>
-
-                {/* Quick Actions - Mobile hidden, Desktop visible 
-                <div className="hidden md:flex gap-4 mt-6">
-                  <Link
-                    href="/student/schedules"
-                    className="flex-1 inline-flex items-center justify-center gap-3 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl font-bold hover:shadow-lg hover:shadow-indigo-200 transition-all text-sm md:text-base"
-                  >
-                    <FaCalendarDay className="w-4 h-4 md:w-5 md:h-5" />
-                    <span className="whitespace-nowrap">Ver Cronograma Completo</span>
-                  </Link>
-                  <Link
-                    href="/student/programs"
-                    className="flex-1 inline-flex items-center justify-center gap-3 bg-white text-indigo-600 border-2 border-slate-200 px-4 py-3 md:px-6 md:py-4 rounded-xl font-bold hover:bg-slate-50 transition-colors text-sm md:text-base"
-                  >
-                    <FaBook className="w-4 h-4 md:w-5 md:h-5" />
-                    <span className="whitespace-nowrap">Meus Programas</span>
-                  </Link>
-                </div>*/}
               </>
             )}
           </div>
@@ -279,58 +355,21 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
 
         {/* SIDEBAR - Design Inspirador */}
         <div className="space-y-4 md:space-y-6">
-          {/* Cronogramas */}
+          {/* Gráfico de Matérias */}
           <div className="bg-white rounded-xl md:rounded-2xl shadow-lg p-4 md:p-6">
-            <div className="flex justify-between items-center mb-3 md:mb-4">
+            <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm md:text-base">
-                <FaCalendar className="w-3 h-3 md:w-4 md:h-4" />
-                <span className="whitespace-nowrap">Meus Cronogramas</span>
+                <FaChartBar className="w-3 h-3 md:w-4 md:h-4 text-violet-600" />
+                <span>Atividades por Matéria</span>
               </h3>
               <Link href="/student/schedules" className="text-indigo-600 hover:text-indigo-700">
                 <FaArrowRight className="w-3 h-3 md:w-3.5 md:h-3.5" />
               </Link>
             </div>
-
-            {instances.length === 0 ? (
-              <div className="text-center py-6 md:py-8 text-slate-400">
-                <FaCalendar className="w-6 h-6 md:w-8 md:h-8 mx-auto mb-2" />
-                <p className="text-xs md:text-sm">Nenhum cronograma</p>
-              </div>
-            ) : (
-              <div className="space-y-2 md:space-y-3">
-                {instances.slice(0, 3).map(instance => (
-                  <Link
-                    key={instance.id}
-                    href={`/student/schedules/${instance.id}`}
-                    className="flex items-center gap-2 md:gap-3 p-3 md:p-4 bg-slate-50 rounded-lg md:rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-                  >
-                    <div 
-                      className="w-2 h-2 md:w-3 md:h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: '#8b5cf6' }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-slate-800 truncate text-sm">
-                        Cronograma {instance.scheduleTemplateId?.slice(0, 8) || 'Ativo'}
-                      </div>
-                      <div className="flex items-center gap-2 md:gap-3 mt-1">
-                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full rounded-full"
-                            style={{ 
-                              width: `${instance.progressCache?.completionPercentage || 0}%`,
-                              backgroundColor: '#8b5cf6'
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs md:text-sm font-semibold text-slate-600 min-w-6 md:min-w-10">
-                          {(instance.progressCache?.completionPercentage) && Math.round(instance.progressCache?.completionPercentage) || 0}%
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <SubjectBarChart
+              data={subjectStats}
+              emptyMessage="Complete atividades com matéria para ver o gráfico"
+            />
           </div>
 
           {/* Lembretes */}
@@ -357,26 +396,6 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
               )}
             </div>
           </div>
-
-          {/* Quick Actions para Mobile
-          {totalTodayActivities > 0 && (
-            <div className="md:hidden grid grid-cols-2 gap-3">
-              <Link
-                href="/student/schedules"
-                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white px-4 py-3 rounded-lg font-semibold hover:shadow-md transition-all text-sm"
-              >
-                <FaCalendarDay className="w-3 h-3" />
-                <span>Cronograma</span>
-              </Link>
-              <Link
-                href="/student/programs"
-                className="inline-flex items-center justify-center gap-2 bg-white text-indigo-600 border border-slate-200 px-4 py-3 rounded-lg font-semibold hover:bg-slate-50 transition-colors text-sm"
-              >
-                <FaBook className="w-3 h-3" />
-                <span>Programas</span>
-              </Link>
-            </div>
-          )} */}
         </div>
       </div>
     </div>

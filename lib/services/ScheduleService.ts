@@ -22,17 +22,52 @@ import {
   ScheduleCategory
 } from '@/types/schedule';
 import { ValidationUtils } from '@/lib/utils/validationUtils';
-import { DateUtils } from '@/lib/utils/dateUtils';
-import { AuditService } from '@/lib/auth/AuditService';
 
+/**
+ * Serviço responsável pela gestão de cronogramas (templates).
+ *
+ * Responsabilidades:
+ * - Criar e editar templates de cronogramas
+ * - Gerenciar atividades associadas ao template
+ * - Controlar ciclo de vida (ativo, arquivado, deletado)
+ * - Preservar integridade dos dados dos alunos ao alterar/remover cronogramas
+ *
+ * ⚠️ IMPORTANTE:
+ * Este serviço impacta diretamente:
+ * - criação de atividades
+ * - geração de instâncias
+ * - dados históricos do aluno (activityProgress)
+ *
+ * Qualquer alteração aqui pode afetar:
+ * - execução de atividades
+ * - analytics
+ * - progresso do aluno
+ */
 export class ScheduleService {
   private static readonly COLLECTIONS = {
     TEMPLATES: 'weeklySchedules',
-    ACTIVITIES: 'scheduleActivities'
+    ACTIVITIES: 'scheduleActivities',
+    INSTANCES: 'scheduleInstances',
+    PROGRESS: 'activityProgress'
   };
 
   /**
-   * Cria um novo template de cronograma
+   * Cria um novo template de cronograma com suas atividades.
+   *
+   * Fluxo:
+   * 1. Valida dados de entrada
+   * 2. Sanitiza dados
+   * 3. Calcula métricas do cronograma
+   * 4. Gera ID único
+   * 5. Persiste template
+   * 6. Cria atividades associadas
+   *
+   * ⚠️ Side effects:
+   * - Escrita em coleção de templates
+   * - Escrita em coleção de atividades
+   *
+   * ⚠️ Risco:
+   * - Não usa transação entre template e activities → possível inconsistência parcial
    */
   static async createScheduleTemplate(
     professionalId: string,
@@ -43,21 +78,15 @@ export class ScheduleService {
     metadata: any;
   }> {
     try {
-      // 1. Validação
       const validation = ValidationUtils.validateScheduleData(data);
       if (!validation.isValid) {
         throw new Error(`Dados inválidos: ${validation.errors.join(', ')}`);
       }
 
       const sanitizedData = ValidationUtils.sanitizeScheduleData(data);
-
-      // 2. Calcular métricas
       const metrics = this.calculateScheduleMetrics(sanitizedData.activities);
-
-      // 3. Criar ID do cronograma
       const scheduleId = this.generateScheduleId(professionalId, sanitizedData.name);
 
-      // 4. Criar template no Firestore
       const scheduleData: Omit<ScheduleTemplate, 'id'> = {
         professionalId,
         name: sanitizedData.name,
@@ -89,333 +118,370 @@ export class ScheduleService {
         updatedAt: serverTimestamp()
       });
 
-      // 5. Criar atividades
       const activityIds = await this.createActivities(scheduleId, sanitizedData.activities);
-
-      // 6. Log de auditoria
-      // COMENTADO
-      // await AuditService.logEvent(professionalId, 'SCHEDULE_CREATED', {
-      //   scheduleId,
-      //   activityCount: activityIds.length,
-      //   metrics
-      // });
-
-      return {
-        scheduleId,
-        activityIds,
-        metadata: metrics
-      };
+      return { scheduleId, activityIds, metadata: metrics };
 
     } catch (error: any) {
-      console.error('Erro ao criar cronograma:', error);
       throw new Error(`Falha ao criar cronograma: ${error.message}`);
     }
   }
 
   /**
-   * Busca um template por ID
-   */
-  static async getScheduleTemplate(
-    scheduleId: string,
-    includeActivities: boolean = false
-  ): Promise<ScheduleTemplate & { activities?: ScheduleActivity[] }> {
-    try {
-      const scheduleDoc = await getDoc(
-        doc(firestore, this.COLLECTIONS.TEMPLATES, scheduleId)
-      );
-
-      if (!scheduleDoc.exists()) {
-        throw new Error('Cronograma não encontrado');
-      }
-
-      const scheduleData = scheduleDoc.data();
-      const schedule = {
-        id: scheduleDoc.id,
-        ...scheduleData,
-        startDate: scheduleData.startDate?.toDate(),
-        endDate: scheduleData.endDate?.toDate(),
-        createdAt: scheduleData.createdAt?.toDate(),
-        updatedAt: scheduleData.updatedAt?.toDate()
-      } as ScheduleTemplate;
-
-      if (includeActivities) {
-        const activities = await this.getScheduleActivities(scheduleId);
-        return { ...schedule, activities };
-      }
-
-      console.log('📦 Dados do cronograma retornados:', {
-        id: scheduleDoc.id,
-        exists: scheduleDoc.exists(),
-        data: scheduleData,
-        hasActivitiesField: 'activities' in scheduleData
-      });
-
-      return schedule;
-
-    } catch (error: any) {
-      console.error('Erro ao buscar cronograma:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Lista cronogramas de um profissional
-   */
-  static async listProfessionalSchedules(
-    professionalId: string,
-    options: {
-      category?: ScheduleCategory;
-      activeOnly?: boolean;
-      limit?: number;
-    } = {}
-  ): Promise<ScheduleTemplate[]> {
-    try {
-      let q = query(
-        collection(firestore, this.COLLECTIONS.TEMPLATES),
-        where('professionalId', '==', professionalId)
-      );
-
-      if (options.activeOnly) {
-        q = query(q, where('isActive', '==', true));
-      }
-
-      if (options.category) {
-        q = query(q, where('category', '==', options.category));
-      }
-
-      const snapshot = await getDocs(q);
-      const schedules: ScheduleTemplate[] = [];
-
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        schedules.push({
-          id: doc.id,
-          ...data,
-          startDate: data.startDate?.toDate(),
-          endDate: data.endDate?.toDate(),
-          createdAt: data.createdAt?.toDate(),
-          updatedAt: data.updatedAt?.toDate()
-        } as ScheduleTemplate);
-      });
-
-      // Ordenar por data de criação (mais recente primeiro)
-      schedules.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-      // Aplicar limite
-      if (options.limit) {
-        return schedules.slice(0, options.limit);
-      }
-
-      return schedules;
-
-    } catch (error: any) {
-      console.error('Erro ao listar cronogramas:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Atualiza um template existente (cria nova versão)
+   * Atualiza um template de cronograma e substitui completamente suas atividades.
+   *
+   * Estratégia adotada:
+   * - Atualiza o template principal
+   * - REMOVE todas as atividades antigas
+   * - CRIA novas atividades do zero
+   *
+   * ⚠️ DECISÃO IMPORTANTE:
+   * Não há "diff" entre atividades → sempre recria tudo
+   *
+   * Benefício:
+   * - Simplicidade
+   *
+   * Risco:
+   * - Perda de referência de IDs antigos
+   * - Se usado em conjunto com instâncias já geradas, pode causar inconsistência
+   *
+   * ⚠️ Usa writeBatch:
+   * - Garante atomicidade ENTRE as operações dentro do batch
+   * - Mas não protege contra leitura concorrente externa
    */
   static async updateScheduleTemplate(
     scheduleId: string,
-    professionalId: string,
-    updates: Partial<CreateScheduleDTO>
-  ): Promise<string> {
-    try {
-      // Buscar template atual
-      const currentTemplate = await this.getScheduleTemplate(scheduleId, true);
-
-      // Verificar permissões
-      if (currentTemplate.professionalId !== professionalId) {
-        throw new Error('Sem permissão para editar este cronograma');
-      }
-
-      // Criar nova versão
-      const newVersion = currentTemplate.metadata.version + 1;
-      const newScheduleId = `${scheduleId}_v${newVersion}`;
-
-      // Mesclar atualizações
-      const mergedData: CreateScheduleDTO = {
-        name: updates.name || currentTemplate.name,
-        description: updates.description || currentTemplate.description,
-        category: updates.category || currentTemplate.category,
-        startDate: updates.startDate || currentTemplate.startDate,
-        endDate: updates.endDate || currentTemplate.endDate,
-        activeDays: updates.activeDays || currentTemplate.activeDays,
-        repeatRules: {
-          resetOnRepeat: updates.repeatRules?.resetOnRepeat ??
-            currentTemplate.repeatRules.resetOnRepeat,
-        },
-        activities: updates.activities ||
-          (currentTemplate as any).activities?.map((activity: ScheduleActivity) => ({
-            dayOfWeek: activity.dayOfWeek,
-            orderIndex: activity.orderIndex,
-            type: activity.type,
-            title: activity.title,
-            description: activity.description,
-            instructions: activity.instructions,
-            config: activity.config,
-            scoring: activity.scoring,
-            metadata: activity.metadata
-          })) || []
-      };
-
-      // Criar novo template
-      const result = await this.createScheduleTemplate(professionalId, mergedData);
-
-      // Arquivar versão antiga
-      await updateDoc(doc(firestore, this.COLLECTIONS.TEMPLATES, scheduleId), {
-        isActive: false,
-        updatedAt: serverTimestamp()
-      });
-
-      return result.scheduleId;
-
-    } catch (error: any) {
-      console.error('Erro ao atualizar cronograma:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Arquivar um cronograma
-   */
-  static async archiveSchedule(
-    scheduleId: string,
-    professionalId: string
+    professionalIdOrData: string | CreateScheduleDTO,
+    data?: CreateScheduleDTO
   ): Promise<void> {
+    const resolvedData: CreateScheduleDTO = data ?? (professionalIdOrData as CreateScheduleDTO);
+    console.group(`🔥 [SERVICE] Atualizando Cronograma: ${scheduleId}`);
     try {
-      const schedule = await this.getScheduleTemplate(scheduleId);
-
-      if (schedule.professionalId !== professionalId) {
-        throw new Error('Sem permissão para arquivar este cronograma');
+      const validation = ValidationUtils.validateScheduleData(resolvedData);
+      if (!validation.isValid) {
+        throw new Error(`Dados inválidos: ${validation.errors.join(', ')}`);
       }
 
-      await updateDoc(doc(firestore, this.COLLECTIONS.TEMPLATES, scheduleId), {
-        isActive: false,
+      const sanitizedData = ValidationUtils.sanitizeScheduleData(resolvedData);
+      const metrics = this.calculateScheduleMetrics(sanitizedData.activities);
+
+      const templateRef = doc(firestore, this.COLLECTIONS.TEMPLATES, scheduleId);
+      const batch = writeBatch(firestore);
+
+      // 1. Atualizar o Documento Principal (Template)
+      console.log(`📝 Preparando payload do template...`);
+      batch.update(templateRef, {
+        name: sanitizedData.name,
+        description: sanitizedData.description,
+        category: sanitizedData.category,
+        startDate: Timestamp.fromDate(sanitizedData.startDate),
+        endDate: sanitizedData.endDate ? Timestamp.fromDate(sanitizedData.endDate) : null,
+        activeDays: sanitizedData.activeDays,
+        'repeatRules.resetOnRepeat': sanitizedData.repeatRules.resetOnRepeat,
+        'metadata.estimatedWeeklyHours': metrics.estimatedWeeklyHours,
+        'metadata.totalActivities': metrics.totalActivities,
+        'metadata.tags': metrics.tags,
         updatedAt: serverTimestamp()
       });
 
-      // COMENTADO
-      // await AuditService.logEvent(professionalId, 'SCHEDULE_ARCHIVED', {
-      //   scheduleId
-      // });
+      /**
+       * Remove TODAS as atividades anteriores vinculadas ao template.
+       *
+       * ⚠️ Importante:
+       * - Essa abordagem descarta completamente a versão anterior
+       * - Não mantém histórico de alterações
+       *
+       * ⚠️ Risco:
+       * - Se houver instâncias já geradas, elas continuarão referenciando versões antigas
+       */
+      console.log(`🧹 Buscando atividades antigas para limpeza...`);
+      const oldActivitiesQuery = query(
+        collection(firestore, this.COLLECTIONS.ACTIVITIES),
+        where('scheduleTemplateId', '==', scheduleId)
+      );
+      const oldActivitiesSnap = await getDocs(oldActivitiesQuery);
+      
+      oldActivitiesSnap.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      console.log(`🗑️ ${oldActivitiesSnap.docs.length} atividades antigas removidas do lote.`);
+
+      /**
+       * Recria todas as atividades do template.
+       *
+       * Estratégia:
+       * - Todas as atividades antigas já foram removidas
+       * - Novas atividades são criadas do zero
+       * - IDs incluem timestamp para evitar colisão
+       *
+       * ⚠️ Consequência:
+       * - IDs antigos são descartados
+       * - Não há versionamento de atividades
+       * - Qualquer referência externa aos IDs antigos se perde
+       *
+       * ⚠️ Impacto:
+       * - Instâncias já geradas continuam com snapshots antigos
+       * - Alterações não propagam retroativamente para atividades já atribuídas
+       */
+      console.log(`➕ Adicionando ${sanitizedData.activities.length} atividades novas ao lote...`);
+      sanitizedData.activities.forEach((a, i) => {
+        const actId = `${scheduleId}_act_${i}_${Date.now()}`; // Adiciona timestamp pra garantir ID único
+        const actRef = doc(firestore, this.COLLECTIONS.ACTIVITIES, actId);
+        batch.set(actRef, {
+          scheduleTemplateId: scheduleId,
+          ...a,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          isActive: true
+        });
+      });
+
+      // 4. Executa a transação no banco
+      console.log(`🚀 Disparando transação no banco...`);
+      await batch.commit();
+
+      console.log(`✅ Cronograma ${scheduleId} atualizado com sucesso!`);
+      console.groupEnd();
+    } catch (error: any) {
+      console.error('❌ Erro na atualização do cronograma:', error);
+      console.groupEnd();
+      throw new Error(`Falha ao atualizar cronograma: ${error.message}`);
+    }
+  }
+
+  /**
+   * Exclusão segura de cronograma.
+   *
+   * Estratégia:
+   * - NÃO deleta dados
+   * - Apenas desativa e arquiva
+   *
+   * Regra de ouro:
+   * Dados do aluno NUNCA são perdidos.
+   *
+   * Fluxo:
+   * 1. Marca template como deletado
+   * 2. Desativa instâncias
+   * 3. Trata atividades de progresso
+   *
+   * ⚠️ Comportamento crítico:
+   * - Atividades concluídas NÃO são alteradas
+   * - Apenas são ocultadas do cronograma ativo
+   *
+   * Benefício:
+   * - Preserva histórico do aluno
+   * - Mantém integridade para analytics
+   */
+  static async deleteSchedule(scheduleId: string, professionalId: string): Promise<void> {
+    try {
+      console.log(`🛡️ Iniciando desativação segura do cronograma: ${scheduleId}`);
+      const batch = writeBatch(firestore);
+
+      // 1. Marcar Template como deletado (mas mantém o documento)
+      const templateRef = doc(firestore, this.COLLECTIONS.TEMPLATES, scheduleId);
+      batch.update(templateRef, {
+        status: 'deleted',
+        isActive: false,
+        isDeleted: true,
+        deletedAt: serverTimestamp()
+      });
+
+      // 2. Buscar instâncias para desativar visualização
+      const instancesQuery = query(
+        collection(firestore, this.COLLECTIONS.INSTANCES),
+        where('scheduleTemplateId', '==', scheduleId)
+      );
+      const instancesSnap = await getDocs(instancesQuery);
+      
+      for (const instanceDoc of instancesSnap.docs) {
+        batch.update(instanceDoc.ref, {
+          isActive: false,
+          status: 'archived', // Mudamos para arquivado para indicar que os dados existem
+          updatedAt: serverTimestamp()
+        });
+
+        // 3. Tratar as atividades de progresso (Filhos)
+        const progressQuery = query(
+          collection(firestore, this.COLLECTIONS.PROGRESS),
+          where('scheduleInstanceId', '==', instanceDoc.id)
+        );
+        const progressSnap = await getDocs(progressQuery);
+        
+        progressSnap.forEach(pDoc => {
+          const pData = pDoc.data();
+          
+          /**
+           * ⚠️ REGRA CRÍTICA DE NEGÓCIO:
+           *
+           * Se a atividade já possui dados do aluno:
+           * - NÃO deletar
+           * - NÃO alterar status crítico
+           *
+           * Apenas:
+           * - remover da visualização ativa
+           *
+           * Motivo:
+           * - preservar histórico
+           * - manter consistência de relatórios
+           */
+          if (pData.status === 'completed' || pData.executionData) {
+             batch.update(pDoc.ref, {
+                isActive: false, // Tira do cronograma ativo
+                hiddenFromSchedule: true, // Flag para relatórios saberem que foi de um cronograma removido
+                updatedAt: serverTimestamp()
+             });
+          } else {
+             // Se era uma atividade pendente sem nenhum dado, podemos marcar como cancelada
+             batch.update(pDoc.ref, {
+                isActive: false,
+                status: 'cancelled',
+                updatedAt: serverTimestamp()
+             });
+          }
+        });
+      }
+
+      await batch.commit();
+      console.log(`✅ Cronograma desativado. Dados de evolução preservados.`);
 
     } catch (error: any) {
-      console.error('Erro ao arquivar cronograma:', error);
+      console.error('❌ Erro na desativação segura:', error);
       throw error;
     }
   }
 
   /**
-   * Métodos auxiliares privados
+   * Alterna estado entre ativo e arquivado.
+   *
+   * Diferença para delete:
+   * - archive → reversível
+   * - delete → lógico (não volta pro fluxo normal)
    */
-  private static async createActivities(
-    scheduleId: string,
-    activities: CreateActivityDTO[]
-  ): Promise<string[]> {
-    const batch = writeBatch(firestore);
-    const activityIds: string[] = [];
+  static async archiveSchedule(scheduleId: string, _professionalId: string): Promise<void> {
+    try {
+      const templateRef = doc(firestore, this.COLLECTIONS.TEMPLATES, scheduleId);
+      const snap = await getDoc(templateRef);
+      if (!snap.exists()) throw new Error('Cronograma não encontrado');
 
-    activities.forEach((activity, index) => {
-      const activityId = `${scheduleId}_act_${index}`;
-      const activityRef = doc(firestore, this.COLLECTIONS.ACTIVITIES, activityId);
+      const isCurrentlyActive = snap.data().isActive !== false;
 
-      const activityData: Omit<ScheduleActivity, 'id'> = {
-        scheduleTemplateId: scheduleId,
-        dayOfWeek: activity.dayOfWeek,
-        orderIndex: activity.orderIndex,
-        type: activity.type,
-        title: activity.title,
-        description: activity.description,
-        instructions: activity.instructions,
-        config: activity.config,
-        scoring: activity.scoring,
-        metadata: activity.metadata,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isActive: true
-      };
-
-      batch.set(activityRef, {
-        ...activityData,
-        createdAt: serverTimestamp(),
+      await updateDoc(templateRef, {
+        isActive: !isCurrentlyActive,
+        status: isCurrentlyActive ? 'archived' : 'active',
         updatedAt: serverTimestamp()
       });
 
-      activityIds.push(activityId);
+      console.log(`✅ Cronograma ${scheduleId} ${isCurrentlyActive ? 'arquivado' : 'restaurado'}.`);
+    } catch (error: any) {
+      console.error('❌ Erro ao arquivar/restaurar cronograma:', error);
+      throw new Error(`Falha ao arquivar cronograma: ${error.message}`);
+    }
+  }
+  /**
+   * Busca um template de cronograma.
+   *
+   * Opção:
+   * - includeActivities → carrega atividades associadas
+   *
+   * ⚠️ Performance:
+   * - includeActivities = true → gera query adicional
+   */
+  static async getScheduleTemplate(scheduleId: string, includeActivities = false): Promise<ScheduleTemplate & { activities?: ScheduleActivity[] }> {
+    const docRef = doc(firestore, this.COLLECTIONS.TEMPLATES, scheduleId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) throw new Error('Não encontrado');
+    const data = snap.data();
+    const schedule = { id: snap.id, ...data, startDate: data.startDate?.toDate(), endDate: data.endDate?.toDate(), createdAt: data.createdAt?.toDate(), updatedAt: data.updatedAt?.toDate() } as ScheduleTemplate;
+    if (includeActivities) {
+      const activities = await this.getScheduleActivities(scheduleId);
+      return { ...schedule, activities };
+    }
+    return schedule;
+  }
+  
+  /**
+   * Lista cronogramas de um profissional.
+   *
+   * Regras aplicadas:
+   * - Ignora cronogramas deletados
+   * - Ordena por data de criação (mais recente primeiro)
+   *
+   * ⚠️ Observação:
+   * - Filtro de categoria/ativo ainda não está sendo aplicado na query (apenas pós-processamento)
+   */
+  static async listProfessionalSchedules(professionalId: string, options: { category?: ScheduleCategory; activeOnly?: boolean; limit?: number; } = {}): Promise<ScheduleTemplate[]> {
+    let q = query(collection(firestore, this.COLLECTIONS.TEMPLATES), where('professionalId', '==', professionalId));
+    const snap = await getDocs(q);
+    const schedules: ScheduleTemplate[] = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.isDeleted) return;
+      schedules.push({ id: doc.id, ...d, startDate: d.startDate?.toDate(), endDate: d.endDate?.toDate(), createdAt: d.createdAt?.toDate(), updatedAt: d.updatedAt?.toDate() } as ScheduleTemplate);
     });
+    schedules.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return options.limit ? schedules.slice(0, options.limit) : schedules;
+  }
 
+  /**
+   * Cria atividades em lote usando writeBatch.
+   *
+   * Benefício:
+   * - Escrita eficiente
+   *
+   * ⚠️ Limitação:
+   * - ID determinístico baseado em index
+   * - Pode gerar conflito em edições futuras
+   */
+  private static async createActivities(scheduleId: string, activities: CreateActivityDTO[]): Promise<string[]> {
+    const batch = writeBatch(firestore);
+    const ids: string[] = [];
+    activities.forEach((a, i) => {
+      const id = `${scheduleId}_act_${i}`;
+      const ref = doc(firestore, this.COLLECTIONS.ACTIVITIES, id);
+      batch.set(ref, { scheduleTemplateId: scheduleId, ...a, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), isActive: true });
+      ids.push(id);
+    });
     await batch.commit();
-    return activityIds;
+    return ids;
   }
 
   private static async getScheduleActivities(scheduleId: string): Promise<ScheduleActivity[]> {
-    const q = query(
-      collection(firestore, this.COLLECTIONS.ACTIVITIES),
-      where('scheduleTemplateId', '==', scheduleId),
-      where('isActive', '==', true)
-    );
-
-    const snapshot = await getDocs(q);
-    const activities: ScheduleActivity[] = [];
-
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      activities.push({
-        id: doc.id,
-        ...data,
-        createdAt: data.createdAt?.toDate(),
-        updatedAt: data.updatedAt?.toDate()
-      } as ScheduleActivity);
-    });
-
-    // Ordenar por dia da semana e índice
-    activities.sort((a, b) => {
-      if (a.dayOfWeek === b.dayOfWeek) {
-        return a.orderIndex - b.orderIndex;
-      }
-      return a.dayOfWeek - b.dayOfWeek;
-    });
-
-    return activities;
+    const q = query(collection(firestore, this.COLLECTIONS.ACTIVITIES), where('scheduleTemplateId', '==', scheduleId), where('isActive', '==', true));
+    const snap = await getDocs(q);
+    const acts: ScheduleActivity[] = [];
+    snap.forEach(d => acts.push({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate(), updatedAt: d.data().updatedAt?.toDate() } as ScheduleActivity));
+    return acts.sort((a, b) => a.dayOfWeek === b.dayOfWeek ? a.orderIndex - b.orderIndex : a.dayOfWeek - b.dayOfWeek);
   }
 
-  private static calculateScheduleMetrics(activities: CreateActivityDTO[]): {
-    totalActivities: number;
-    estimatedWeeklyHours: number;
-    tags: string[];
-  } {
-    const totalActivities = activities.length;
-    const estimatedWeeklyHours = activities.reduce(
-      (total, activity) => total + (activity.metadata.estimatedDuration || 30),
-      0
-    ) / 60;
-
-    // Extrair tags únicas
-    const tags = Array.from(new Set(
-      activities.flatMap(activity => [
-        ...(activity.metadata.therapeuticFocus || []),
-        ...(activity.metadata.educationalFocus || [])
-      ])
-    )).filter(Boolean);
-
-    return {
-      totalActivities,
-      estimatedWeeklyHours: parseFloat(estimatedWeeklyHours.toFixed(1)),
-      tags
-    };
+  /**
+   * Calcula métricas agregadas do cronograma.
+   *
+   * Retorna:
+   * - total de atividades
+   * - horas estimadas por semana
+   * - tags derivadas das atividades
+   *
+   * ⚠️ Importante:
+   * - estimativa baseada em metadata → depende da qualidade dos dados de entrada
+   */
+  private static calculateScheduleMetrics(activities: CreateActivityDTO[]) {
+    const total = activities.length;
+    const hours = activities.reduce((t, a) => t + (a.metadata.estimatedDuration || 30), 0) / 60;
+    const tags = Array.from(new Set(activities.flatMap(a => [...(a.metadata.therapeuticFocus || []), ...(a.metadata.educationalFocus || [])]))).filter(Boolean);
+    return { totalActivities: total, estimatedWeeklyHours: parseFloat(hours.toFixed(1)), tags };
   }
 
-  private static generateScheduleId(professionalId: string, name: string): string {
-    const timestamp = Date.now();
-    const nameSlug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .substring(0, 20);
-
-    return `${professionalId.substring(0, 8)}_${nameSlug}_${timestamp}`;
+  /**
+   * Gera ID único do cronograma.
+   *
+   * Estrutura:
+   * - prefixo do profissional
+   * - nome sanitizado
+   * - timestamp
+   *
+   * ⚠️ Risco:
+   * - não garante unicidade absoluta (mas colisão é improvável)
+   */
+  private static generateScheduleId(profId: string, name: string): string {
+    return `${profId.substring(0, 8)}_${name.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 20)}_${Date.now()}`;
   }
 }

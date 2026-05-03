@@ -33,14 +33,62 @@ import { useAuth } from '@/context/AuthContext';
 import { useSchedules } from '@/hooks/useSchedules';
 import { ScheduleInstanceService } from '@/lib/services/ScheduleInstanceService';
 import { StudentService } from '@/lib/services/StudentService';
+import { collectionGroup, collection, query, where, getDocs } from 'firebase/firestore';
+import { firestore } from '@/firebase/config';
+import SubjectBarChart, { computeSubjectStats, SubjectStat } from '@/components/charts/SubjectBarChart';
+import { GRADE_OPTIONS, getGradeLabel } from '@/lib/utils/constants';
 
+/**
+ * Dashboard operacional do profissional.
+ *
+ * Responsabilidades:
+ * - Exibir visão geral rápida (stats básicas)
+ * - Mostrar cronogramas recentes
+ * - Exibir alertas acionáveis
+ * - Fornecer atalhos para ações principais
+ *
+ * Fontes de dados:
+ * - Firestore (students, activityProgress)
+ * - ScheduleInstanceService
+ * - hooks locais (useSchedules)
+ *
+ * ⚠️ IMPORTANTE:
+ * Diferente do AnalyticsPage, este dashboard usa:
+ * - dados semi-brutos
+ * - agregações locais simples
+ *
+ * ⚠️ Impacto:
+ * - produtividade do profissional
+ * - tomada de decisão rápida
+ */
 export default function ProfessionalDashboardPage() {
   const { user } = useAuth();
+
+  /**
+   * Hook para carregar cronogramas ativos do profissional.
+   *
+   * Configuração:
+   * - apenas ativos
+   * - limite de 5 (dashboard)
+   *
+   * ⚠️ Otimizado para exibição rápida
+   */
   const { schedules, loading: schedulesLoading, refresh: refreshSchedules } = useSchedules({ 
     activeOnly: true,
     limit: 5 
   });
   
+  /**
+   * Estado consolidado de métricas rápidas do dashboard.
+   *
+   * Inclui:
+   * - alunos totais
+   * - alunos ativos
+   * - cronogramas ativos
+   * - taxa de conclusão
+   *
+   * ⚠️ Esses dados são calculados localmente
+   */
   const [stats, setStats] = useState({
     totalStudents: 0,
     activeStudents: 0,
@@ -52,18 +100,54 @@ export default function ProfessionalDashboardPage() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [topStudents, setTopStudents] = useState<any[]>([]);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
+  const [chartGrade, setChartGrade] = useState<string>('');
+  const [chartStudentId, setChartStudentId] = useState<string>('');
+  const [chartData, setChartData] = useState<SubjectStat[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
 
   useEffect(() => {
+
+    /**
+     * Carrega todos os dados do dashboard.
+     *
+     * Fluxo:
+     * 1. Busca alunos atribuídos
+     * 2. Busca instâncias de cronograma
+     * 3. Calcula métricas agregadas
+     * 4. Monta ranking básico
+     *
+     * ⚠️ IMPORTANTE:
+     * - mistura múltiplas queries
+     * - faz agregação no cliente
+     *
+     * ⚠️ Risco:
+     * - pode escalar mal com muitos alunos
+     */
     const loadDashboardData = async () => {
       if (!user) return;
       
       try {
         setLoadingStats(true);
         
-        // Carregar estatísticas
-        const students = await StudentService.getStudentsByProfessional(user.id, {
-          activeOnly: true
-        });
+        /**
+         * Busca alunos atribuídos ao profissional.
+         *
+         * Filtros:
+         * - assignedProfessionals contém user.id
+         * - isActive = true
+         *
+         * ⚠️ Fonte primária de dados do dashboard
+         */
+        const studentsSnap = await getDocs(
+          query(
+            collection(firestore, 'students'),
+            where('profile.assignedProfessionals', 'array-contains', user.id),
+            where('isActive', '==', true)
+          )
+        );
+        const students = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        setAllStudents(students);
         
         // Contar instâncias ativas e calcular engajamento
         let activeInstances = 0;
@@ -71,6 +155,16 @@ export default function ProfessionalDashboardPage() {
         let totalInstances = 0;
         const studentEngagement: any[] = [];
         
+        /**
+         * Calcula engajamento por aluno.
+         *
+         * Estratégia:
+         * - limita para 10 alunos (performance)
+         * - usa apenas a instância mais recente
+         *
+         * ⚠️ Trade-off:
+         * precisão vs performance
+         */
         for (const student of students.slice(0, 10)) {
           const instances = await ScheduleInstanceService.getStudentActiveInstances(
             student.id,
@@ -93,7 +187,14 @@ export default function ProfessionalDashboardPage() {
           }
         }
         
-        // Ordenar alunos por engajamento
+        /**
+         * Ordena alunos por engajamento.
+         *
+         * Critério:
+         * - completionPercentage
+         *
+         * ⚠️ Limitado ao top 3 para dashboard
+         */
         const sortedStudents = studentEngagement
           .sort((a, b) => b.engagement - a.engagement)
           .slice(0, 3);
@@ -105,9 +206,23 @@ export default function ProfessionalDashboardPage() {
           ? (sortedStudents.reduce((sum, s) => sum + s.engagement, 0) / sortedStudents.length) 
           : 0;
         
+          /**
+           * Consolida métricas do dashboard.
+           *
+           * Inclui:
+           * - taxa média de conclusão
+           * - engajamento médio
+           * - alunos ativos
+           *
+           * ⚠️ Algumas métricas são heurísticas (ex: atividade recente)
+           */
         setStats({
           totalStudents: students.length,
           activeStudents: students.filter(s => {
+
+            /**
+             * Considera aluno ativo se teve atividade nos últimos 7 dias
+             */
             const lastActivity = s.lastLoginAt || s.updatedAt;
             const daysSinceLastActivity = (Date.now() - lastActivity.getTime()) / (1000 * 60 * 60 * 24);
             return daysSinceLastActivity < 7;
@@ -136,6 +251,39 @@ export default function ProfessionalDashboardPage() {
     loadDashboardData();
   }, [user, schedules]);
 
+  useEffect(() => {
+    if (!chartStudentId) { setChartData([]); return; }
+    const load = async () => {
+      setChartLoading(true);
+      try {
+
+        /**
+         * Busca atividades concluídas para gerar gráfico por matéria.
+         *
+         * Fonte:
+         * - collectionGroup(activityProgress)
+         *
+         * ⚠️ Pode ser pesado dependendo do volume
+         */
+        const q = query(
+          collectionGroup(firestore, 'activityProgress'),
+          where('studentId', '==', chartStudentId),
+          where('status', '==', 'completed')
+        );
+        const snap = await getDocs(q);
+        const docs = snap.docs.map(d => ({ status: 'completed', activitySnapshot: d.data().activitySnapshot }));
+        setChartData(computeSubjectStats(docs));
+      } catch { setChartData([]); }
+      finally { setChartLoading(false); }
+    };
+    load();
+  }, [chartStudentId]);
+
+  /**
+   * Atualiza dados do dashboard manualmente.
+   *
+   * ⚠️ Atualmente usa delay artificial (setTimeout)
+   */
   const refreshData = () => {
     setLoadingStats(true);
     refreshSchedules();
@@ -171,6 +319,15 @@ export default function ProfessionalDashboardPage() {
   return (
     <div className="p-4 md:p-6 min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
       {/* Header do Dashboard */}
+
+      /**
+       * Header principal do dashboard.
+       *
+       * Exibe:
+       * - saudação
+       * - nome do profissional
+       * - ações principais
+       */
       <div className="mb-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-6">
           <div className="flex items-center gap-4">
@@ -199,6 +356,15 @@ export default function ProfessionalDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Coluna Principal (2/3) */}
         <div className="lg:col-span-2 space-y-8">
+
+          /**
+           * Lista cronogramas recentes do profissional.
+           *
+           * Limite:
+           * - até 5 itens
+           *
+           * ⚠️ foco em acesso rápido
+           */
           {/* Cronogramas Recentes */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-gray-200">
@@ -310,89 +476,88 @@ export default function ProfessionalDashboardPage() {
               </div>
             )}
           </div>
-
-          {/* Alunos com Melhor Desempenho */}
+          
+          /**
+           * Gráfico de atividades concluídas por matéria.
+           *
+           * Filtros:
+           * - série
+           * - aluno
+           *
+           * ⚠️ Dados baseados em activityProgress
+           */
+          {/* Atividades por Matéria */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
-                    <FaTrophy className="w-5 h-5 text-amber-600" />
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center">
+                    <FaChartBar className="w-5 h-5 text-violet-600" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900">Melhor Desempenho</h2>
-                    <p className="text-sm text-gray-600">Alunos com maior engajamento</p>
+                    <h2 className="text-lg font-bold text-gray-900">Atividades por Matéria</h2>
+                    <p className="text-sm text-gray-600">Concluídas por disciplina</p>
                   </div>
                 </div>
-                <Link
-                  href="/professional/students"
-                  className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
-                >
-                  Ver todos
-                  <FaChevronRight className="w-3 h-3" />
-                </Link>
+                {/* Dropdowns série + aluno */}
+                <div className="flex gap-3 flex-wrap">
+                  {/* Dropdown Série */}
+                  <select
+                    className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-violet-400 outline-none flex-1 min-w-[140px]"
+                    value={chartGrade}
+                    onChange={e => { setChartGrade(e.target.value); setChartStudentId(''); }}
+                  >
+                    <option value="">Todas as séries</option>
+                    {GRADE_OPTIONS.filter(g =>
+                      allStudents.some(s => s.profile?.grade === g.value)
+                    ).map(g => (
+                      <option key={g.value} value={g.value}>{g.label}</option>
+                    ))}
+                  </select>
+                  {/* Dropdown Aluno — filtra pela série selecionada */}
+                  <select
+                    className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-violet-400 outline-none flex-1 min-w-[160px]"
+                    value={chartStudentId}
+                    onChange={e => setChartStudentId(e.target.value)}
+                  >
+                    <option value="">Selecionar aluno</option>
+                    {allStudents
+                      .filter(s => !chartGrade || s.profile?.grade === chartGrade)
+                      .map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                  </select>
+                </div>
               </div>
             </div>
-            
-            {topStudents.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl mb-4">
-                  <FaUsers className="w-8 h-8 text-gray-400" />
+            <div className="p-6">
+              {!chartStudentId ? (
+                <div className="text-center py-6 text-gray-400 text-sm">
+                  {allStudents.length === 0
+                    ? 'Nenhum aluno atribuído'
+                    : 'Selecione um aluno para ver o gráfico'}
                 </div>
-                <p className="text-gray-500">
-                  Sem dados de desempenho disponíveis
-                </p>
-              </div>
-            ) : (
-              <div className="p-6">
-                <div className="space-y-4">
-                  {topStudents.map((student, index) => (
-                    <div key={student.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200">
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-                            <span className="font-bold text-blue-700">
-                              {student.name.split(' ').map((n:any) => n[0]).join('').toUpperCase().substring(0, 2)}
-                            </span>
-                          </div>
-                          {index === 0 && (
-                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center">
-                              <FaStar className="w-3 h-3 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-gray-900">{student.name}</h4>
-                          <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
-                            <div className="flex items-center gap-1">
-                              <FiActivity className="w-3 h-3" />
-                              <span>{student.engagement}% engajamento</span>
-                            </div>
-                            <span>•</span>
-                            <div className="flex items-center gap-1">
-                              <FaFire className="w-3 h-3 text-amber-500" />
-                              <span>{student.streak} dias</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="text-right">
-                        <div className="text-lg font-bold text-gray-900">
-                          {student.engagement}%
-                        </div>
-                        <div className="text-xs text-gray-500">Engajamento</div>
-                      </div>
-                    </div>
-                  ))}
+              ) : chartLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
                 </div>
-              </div>
-            )}
+              ) : (
+                <SubjectBarChart data={chartData} />
+              )}
+            </div>
           </div>
         </div>
 
         {/* Coluna Lateral (1/3) */}
         <div className="space-y-8">
+
+          /**
+           * Atalhos para ações principais do sistema.
+           *
+           * Objetivo:
+           * - reduzir fricção do usuário
+           * - aumentar produtividade
+           */
           {/* Ações Rápidas */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <div className="flex items-center gap-3 mb-6">
@@ -459,7 +624,17 @@ export default function ProfessionalDashboardPage() {
               </Link>
             </div>
           </div>
-
+          
+          /**
+           * Sistema de alertas baseado em métricas.
+           *
+           * Exemplos:
+           * - cronogramas pendentes
+           * - baixo engajamento
+           * - baixa taxa de conclusão
+           *
+           * ⚠️ Atua como sistema de decisão rápida
+           */
           {/* Alertas e Notificações */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <div className="flex items-center gap-3 mb-6">
@@ -549,7 +724,15 @@ export default function ProfessionalDashboardPage() {
               )}
             </div>
           </div>
-
+          
+          /**
+           * Lista de eventos recentes do sistema.
+           *
+           * ⚠️ Atualmente mockado (simulação)
+           *
+           * Em produção:
+           * deve vir de logs reais
+           */
           {/* Atividade Recente */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
             <div className="flex items-center gap-3 mb-6">

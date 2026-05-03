@@ -1,216 +1,240 @@
 // hooks/useStudentSchedule.ts
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ScheduleInstanceService } from '@/lib/services/ScheduleInstanceService';
 import { ProgressService } from '@/lib/services/ProgressService';
-import { ScheduleInstance, ActivityProgress } from '@/types/schedule';
+import { ActivityProgress, ScheduleInstance } from '@/types/schedule';
 import { useAuth } from '@/context/AuthContext';
-import { DateUtils } from '@/lib/utils/dateUtils';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { firestore } from '@/firebase/config';
 
 export function useStudentSchedule() {
   const { user } = useAuth();
-  const [instances, setInstances] = useState<(ScheduleInstance & { progress?: ActivityProgress[] })[]>([]);
-  const [todayActivities, setTodayActivities] = useState<ActivityProgress[]>([]);
-  const [weekActivities, setWeekActivities] = useState<ActivityProgress[]>([]); // NOVO
+  const [instances, setInstances] = useState<ScheduleInstance[]>([]);
+  const [instancesLoaded, setInstancesLoaded] = useState(false); // 🟢 A Verdadeira Luz Verde
+  const [weekActivities, setWeekActivities] = useState<ActivityProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    if (!user || user.role !== 'student') {
-      console.log('🚫 Usuário não é aluno ou não logado');
-      setInstances([]);
-      setTodayActivities([]);
-      setWeekActivities([]); // NOVO
-      setLoading(false);
+  /**
+   * 1. CARREGAR INSTÂNCIAS (Roda apenas 1 vez, na montagem do componente)
+   */
+  const fetchInstances = useCallback(async () => {
+    if (!user?.id || user.role !== 'student') return;
+    
+    console.group('🔍 [HOOK] Auditoria Inicial de Instâncias');
+    console.log(`⏳ Buscando instâncias ativas para: ${user.id}`);
+    
+    try {
+      const active = await ScheduleInstanceService.getStudentActiveInstances(user.id);
+      console.log(`📡 Instâncias legítimas baixadas do banco: ${active.length}`);
+      setInstances(active); // Guarda no state oficial
+    } catch (err) {
+      console.error("❌ Falha ao buscar instâncias:", err);
+      setError("Erro ao carregar instâncias ativas.");
+    } finally {
+      setInstancesLoaded(true); // Acende a luz verde APÓS os dados estarem no state
+      console.groupEnd();
+    }
+  }, [user?.id, user?.role]);
+
+  // Disparo Inicial
+  useEffect(() => {
+    fetchInstances();
+  }, [fetchInstances]);
+
+  /**
+   * 2. LISTENER REAL-TIME COM TRAVA BLINDADA E JANELA AMPLIADA
+   */
+  useEffect(() => {
+    // 🛑 A TRAVA: Se não tem usuário OU se as instâncias ainda não carregaram, MORRE AQUI.
+    if (!user?.id || user.role !== 'student' || !instancesLoaded) {
+      console.log('⏳ [REAL-TIME] Aguardando luz verde das instâncias...');
       return;
     }
 
-    try {
-      setLoading(true);
-      console.log('🔄 Carregando dados do aluno:', user.id);
+    console.group('📡 [REAL-TIME] Iniciando Conexão com Firebase');
+    
+    // 🔥 CORREÇÃO: Usar a janela exata da semana ativa de cada instância
+    const instanceWindows = new Map();
+    instances.forEach(i => {
+      let start: any = i.currentWeekStartDate;
+      let end: any = i.currentWeekEndDate;
+      if (start && typeof start.toDate === 'function') start = start.toDate();
+      else if (!(start instanceof Date)) start = new Date(start);
+      
+      if (end && typeof end.toDate === 'function') end = end.toDate();
+      else if (!(end instanceof Date)) end = new Date(end);
+      
+      if (start instanceof Date && !isNaN(start.getTime()) && end instanceof Date && !isNaN(end.getTime())) {
+        const s = new Date(start);
+        s.setHours(0, 0, 0, 0); // Exatamente meia-noite local
+        const e = new Date(end);
+        e.setHours(23, 59, 59, 999); // Exatamente fim do dia local
+        instanceWindows.set(i.id, { start: s, end: e, weekNumber: i.currentWeekNumber });
+      }
+    });
+    
+    const validInstanceIds = new Set(instances.map(i => i.id));
+    // Quando não há instâncias ativas, bypassa a validação de órfão — aluno sem cronograma
+    // ainda deve ver suas atividades históricas
+    const hasActiveInstances = validInstanceIds.size > 0;
+    console.log(`🛡️ O Firebase vai validar as atividades contra ${validInstanceIds.size} instâncias mães.`);
 
-      // Carregar instâncias ativas
-      const activeInstances = await ScheduleInstanceService.getStudentActiveInstances(
-        user.id,
-        { includeProgress: true, limit: 5 }
-      );
-      console.log('📋 Instâncias carregadas:', activeInstances.length);
-      setInstances(activeInstances);
+    const q = query(
+      collection(firestore, 'activityProgress'),
+      where('studentId', '==', user.id),
+      where('isActive', '==', true)
+    );
 
-      // Carregar atividades de hoje
-      console.log('📅 Buscando atividades de hoje...');
-      const today = await ScheduleInstanceService.getTodayActivities(user.id);
-      console.log('✅ Atividades de hoje encontradas:', today.length);
-      setTodayActivities(today);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.group('📊 [SNAPSHOT EVENT] Dados do Firebase!');
+      console.log(`📦 Lidos ${snapshot.size} documentos brutos.`);
 
-      // NOVO: Carregar atividades da semana atual
-      console.log('📅 Buscando atividades da semana...');
-      const week = await ScheduleInstanceService.getWeekActivities(user.id);
-      console.log('✅ Atividades da semana encontradas:', week.length);
-      setWeekActivities(week);
+      const filteredActivities: ActivityProgress[] = [];
 
-      setError(null);
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const scheduledDate = data.scheduledDate?.toDate();
 
-    } catch (err: any) {
-      console.error('❌ Erro ao carregar cronogramas do aluno:', err);
-      setError(err.message || 'Erro ao carregar dados');
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+        if (!scheduledDate) return;
 
-  const startActivity = useCallback(async (progressId: string) => {
-    if (!user) return;
-
-    try {
-      await ProgressService.startActivity(progressId, user.id);
-      await loadData(); // Recarregar dados
-      return true;
-    } catch (err: any) {
-      console.error('Erro ao iniciar atividade:', err);
-      throw err;
-    }
-  }, [user, loadData]);
-
-  const completeActivity = useCallback(async (progressId: string, completionData?: any) => {
-    if (!user) return;
-
-    try {
-      const result = await ProgressService.completeActivity(
-        progressId,
-        user.id,
-        completionData
-      );
-      await loadData(); // Recarregar dados
-      return result;
-    } catch (err: any) {
-      console.error('Erro ao completar atividade:', err);
-      throw err;
-    }
-  }, [user, loadData]);
-
-  const skipActivity = useCallback(async (progressId: string, reason?: string) => {
-    if (!user) return;
-
-    try {
-      await ProgressService.skipActivity(progressId, user.id, reason);
-      await loadData();
-      return true;
-    } catch (err: any) {
-      console.error('Erro ao pular atividade:', err);
-      throw err;
-    }
-  }, [user, loadData]);
-
-  useEffect(() => {
-    loadData();
-
-    // Recarregar a cada 5 minutos para manter dados atualizados
-    const interval = setInterval(loadData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [loadData]);
-
-  // Adicione listener em tempo real para atividades
-  useEffect(() => {
-    if (!user || user.role !== 'student') return;
-
-    // Listener para atividades de hoje em tempo real
-    const setupTodayActivitiesListener = async () => {
-      try {
-        // Buscar instâncias primeiro
-        const activeInstances = await ScheduleInstanceService.getStudentActiveInstances(
-          user.id,
-          { includeProgress: false, limit: 5 }
-        );
-        setInstances(activeInstances);
-
-        // Para cada instância, adicionar listener de progresso
-        const today = new Date();
-        const todayDayOfWeek = DateUtils.getDayOfWeek(today);
-
-        const unsubscribers: (() => void)[] = [];
-
-        for (const instance of activeInstances) {
-          const q = query(
-            collection(firestore, 'activityProgress'),
-            where('scheduleInstanceId', '==', instance.id),
-            where('weekNumber', '==', instance.currentWeekNumber),
-            where('dayOfWeek', '==', todayDayOfWeek),
-            where('isActive', '==', true)
-          );
-
-          const unsubscribe = onSnapshot(q, (snapshot) => {
-            const todayActivities: ActivityProgress[] = [];
-
-            snapshot.forEach(doc => {
-              const data = doc.data();
-              const progress: any = {  //COMENTADO IMPORTANTE
-                id: doc.id,
-                ...data,
-                scheduledDate: data.scheduledDate?.toDate(),
-                startedAt: data.startedAt?.toDate(),
-                completedAt: data.completedAt?.toDate(),
-                createdAt: data.createdAt?.toDate(),
-                updatedAt: data.updatedAt?.toDate(),
-                studentId: user.id, // ← Garantir que studentId seja o atual
-                activitySnapshot: {
-                  ...data.activitySnapshot,
-                  createdAt: data.activitySnapshot?.createdAt?.toDate(),
-                  updatedAt: data.activitySnapshot?.updatedAt?.toDate()
-                }
-              };
-              todayActivities.push(progress);
-            });
-
-            setTodayActivities(prev => {
-              // Atualizar mantendo ordenação
-              const updated = [...prev];
-              todayActivities.forEach(newActivity => {
-                const index = updated.findIndex(a => a.id === newActivity.id);
-                if (index > -1) {
-                  updated[index] = newActivity;
-                } else {
-                  updated.push(newActivity);
-                }
-              });
-              return updated.sort((a, b) => a.dayOfWeek - b.dayOfWeek);
-            });
-          });
-
-          unsubscribers.push(unsubscribe);
+        // Se não há instâncias ativas, aceita qualquer atividade do aluno (sem cronograma = sem filtro de órfão)
+        const isLegit = !hasActiveInstances || validInstanceIds.has(data.scheduleInstanceId);
+        let isWithinWindow = false;
+        
+        if (isLegit) {
+          const window = instanceWindows.get(data.scheduleInstanceId);
+          if (window) {
+            if (data.weekNumber !== undefined && window.weekNumber !== undefined) {
+              isWithinWindow = data.weekNumber === window.weekNumber;
+            } else {
+              // Neutraliza problemas de fuso horário movendo a data alvo para o meio-dia (12:00) local
+              // antes de verificar se pertence à semana exata, sem precisar alargar as bordas.
+              const isUTCMidnight = scheduledDate.getUTCHours() === 0 && scheduledDate.getUTCMinutes() === 0;
+              const intendedYear = isUTCMidnight ? scheduledDate.getUTCFullYear() : scheduledDate.getFullYear();
+              const intendedMonth = isUTCMidnight ? scheduledDate.getUTCMonth() : scheduledDate.getMonth();
+              const intendedDate = isUTCMidnight ? scheduledDate.getUTCDate() : scheduledDate.getDate();
+              
+              const safeActivityDate = new Date(intendedYear, intendedMonth, intendedDate, 12, 0, 0);
+              isWithinWindow = safeActivityDate >= window.start && safeActivityDate <= window.end;
+            }
+          } else {
+            isWithinWindow = true; // Fallback se não houver datas configuradas na instância
+          }
         }
 
-        return () => {
-          unsubscribers.forEach(unsubscribe => unsubscribe());
-        };
+        if (isLegit && isWithinWindow) {
+          filteredActivities.push({
+            id: doc.id,
+            ...data,
+            scheduledDate,
+            startedAt: data.startedAt?.toDate(),
+            completedAt: data.completedAt?.toDate(),
+          } as ActivityProgress);
+        } else {
+          if (!isLegit) {
+            console.log(`🚫 [ÓRFÃO] Barrado: "${data.activitySnapshot?.title || doc.id}" | instanceId=${data.scheduleInstanceId}`);
+          } else {
+            console.log(`📅 [FORA JANELA] Barrado: "${data.activitySnapshot?.title || doc.id}" | scheduledDate=${scheduledDate?.toISOString()} | weekNumber=${data.weekNumber} | status=${data.status}`);
+          }
+        }
+      });
 
-      } catch (err: any) {
-        console.error('Erro ao configurar listener:', err);
-        setError(err.message);
+      filteredActivities.sort((a, b) => (a.scheduledDate?.getTime() || 0) - (b.scheduledDate?.getTime() || 0));
+
+      // --- DIAGNÓSTICO COMPLETION RATE ---
+      const byStatus = filteredActivities.reduce<Record<string, number>>((acc, a) => {
+        acc[a.status] = (acc[a.status] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('[COMPLETION_RATE_DIAG] weekActivities por status:', byStatus);
+      console.log('[COMPLETION_RATE_DIAG] IDs + status + scheduledDate:');
+      filteredActivities.forEach(a => {
+        console.log(`  id=${a.id} | status=${a.status} | dayOfWeek=${(a as any).dayOfWeek} | scheduledDate=${a.scheduledDate?.toISOString()}`);
+      });
+      // ------------------------------------
+
+      console.log(`✨ [SUCESSO] ${filteredActivities.length} atividades limpas e prontas para a tela.`);
+      setWeekActivities(filteredActivities);
+      setLoading(false);
+      setError(null);
+      console.groupEnd();
+    }, (err) => {
+      console.error("❌ [FIREBASE ERROR]:", err.message);
+      setError("Erro de sincronização.");
+      setLoading(false);
+    });
+
+    console.groupEnd();
+    
+    return () => unsubscribe();
+  }, [user?.id, user?.role, instancesLoaded, instances]); 
+
+  /**
+   * 3. FILTRO PARA HOJE BLINDADO (MATEMÁTICA PURA)
+   */
+  const todayActivities = useMemo(() => {
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // JS getDay(): 0=Dom, 1=Seg ... Schedule dayOfWeek: 0=Seg, 1=Ter ...
+    // Conversão: (jsDay + 6) % 7
+    const scheduleDayOfWeek = (now.getDay() + 6) % 7;
+
+    return weekActivities.filter(a => {
+      if (a.dayOfWeek !== undefined) {
+        return a.dayOfWeek === scheduleDayOfWeek;
       }
-    };
 
-    const cleanup = setupTodayActivitiesListener();
+      if (!a.scheduledDate) return false;
+      
+      let d = a.scheduledDate;
+      if (typeof (d as any).toDate === 'function') d = (d as any).toDate();
+      else if (!(d instanceof Date)) d = new Date(d);
 
-    return () => {
-      if (cleanup) cleanup.then(fn => fn?.());
-    };
-  }, [user]);
+      if (isNaN(d.getTime())) return false;
+
+      // Detecta se a data foi salva como UTC Midnight (00:00:00Z)
+      const isUTCMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0;
+      
+      let dateStr = '';
+      if (isUTCMidnight) {
+        dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      } else {
+        dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+      
+      return dateStr === localToday;
+    });
+  }, [weekActivities]);
+
+  const totalTodayActivities = useMemo(() => todayActivities.length, [todayActivities]);
+
+  /**
+   * 4. AÇÕES
+   */
+  const startActivity = useCallback(async (id: string) => {
+    if (!user?.id) return;
+    try { await ProgressService.startActivity(id, user.id); } 
+    catch (err) { console.error("❌ Erro ao startar:", err); }
+  }, [user?.id]);
+
+  const completeActivity = useCallback(async (id: string, data?: any) => {
+    if (!user?.id) return;
+    try { await ProgressService.completeActivity(id, user.id, data); } 
+    catch (err) { console.error("❌ Erro ao completar:", err); }
+  }, [user?.id]);
 
   return {
     instances,
-    todayActivities,
     weekActivities,
+    todayActivities,
+    totalTodayActivities,
     loading,
     error,
-    refresh: loadData,
+    refresh: fetchInstances,
     startActivity,
-    completeActivity,
-    skipActivity,
-    hasActiveSchedules: instances.length > 0,
-    totalTodayActivities: todayActivities.length
+    completeActivity
   };
 }
