@@ -1,4 +1,4 @@
-# Technical Change Report — Nexus Web
+# Documentação — Atualizações do Sistema Nexus Web
 
 **Branch:** `feature/edicao-planilhas`
 **Base de comparação:** `origin/main...HEAD`
@@ -8,6 +8,17 @@
 ---
 
 ## Seção A — Verificação de Estado (Pré-Documentação)
+|-----------------------------------|-----------------------------|---------------------------------------------|
+|           Verificação             |           Comando           |                  Resultado                  |
+|-----------------------------------|-----------------------------|---------------------------------------------|
+|       Modificações locais         | `git diff --stat`           |                   Nenhum                    |
+|        Arquivos em stage          | `git diff --cached`         |                   Nenhum                    |
+|         Untracked files           | `git ls-files --others`     |                   Nenhum                    |
+|            Base usada             | `origin/main...HEAD`        |               ✅ Confirmada                 |
+|   HEAD sincronizado com origin    | `git log --decorate`        | ✅ `HEAD = origin/feature/edicao-planilhas` |
+| Commits à frente de `origin/main` | `git log origin/main..HEAD` |                8 commits                    |
+|  Arquivos alterados (commitados)  | `git diff --name-status`    |               45 arquivos                   |
+|-----------------------------------|-----------------------------|---------------------------------------------|
 
 | Verificação | Comando | Resultado |
 |---|---|---|
@@ -21,7 +32,7 @@
 
 ---
 
-## Uncommitted / Local WIP — Not part of official branch diff
+## Uncommitted / Local WIP — Não é uma parte oficial da branch
 
 > **Esta seção está vazia.**
 > Working tree sem modificações em arquivos rastreados. O único item não rastreado é `docs/CHANGE_REPORT.md`, referente a este relatório, ainda não commitado.
@@ -39,20 +50,37 @@ Os seguintes artefatos foram identificados na análise, presentes em commits int
 | `123` | Arquivo vazio sem extensão criado por acidente. |
 
 **Resultado:** Nenhum desses artefatos aparece no diff `origin/main...HEAD`. A branch, no estado do HEAD atual, não contém rota admin sem autenticação, patch WIP versionado ou arquivo acidental.
-
 ---
+
+Quem foi impactado por essas mudanças?
+
+Profissionais (quem cria cronogramas)
+- Agora podem editar cronogramas corretamente
+- Visualizam dados mais confiáveis nos relatórios
+- Conseguem atribuir cronogramas diferentes de maneira simultânea
+- Visualizam dados coerentes com o banco no "ranking do bem-estar"
+
+Alunos
+- Veem progresso atualizado em tempo real
+- Possuem um timer durante atividades
+- Nível e pontuação agora refletem a realidade
+- Sistema de conquistas mais responsivo (ainda está incompleto)
+
+⚙️ Sistema (interno)
+- Melhor consistência de dados
+- Menos erros nos cálculos
 
 ## 1. Executive Summary
 
 Esta branch contém **10 commits** com alterações em **43 arquivos** (42 de produto + este relatório) organizadas em quatro eixos:
 
-1. **Edição de cronogramas (core)** — reescrita do `ScheduleService`, `ScheduleInstanceService`, `AssignmentInterface`, `ScheduleBuilder`, `ScheduleHeaderPanel`. Batch operations atômicas para update de template; guard contra instâncias duplicadas via `collectionGroup`.
+1. Edição de cronogramas (core) — reescrita do `ScheduleService`, `ScheduleInstanceService`, `AssignmentInterface`, `ScheduleBuilder`, `ScheduleHeaderPanel`. Batch operations atômicas para update de template; guard contra instâncias duplicadas via `collectionGroup`.
 
-2. **Correção de métricas do aluno** — `ProgressService.updateStudentStats` reescrito: `level` calculado como `floor(totalPoints/200)+1`; `streak` incrementa apenas uma vez por dia; erros não mais silenciados. `useStudentWeeklyProgress` lê perfil diretamente do Firestore.
+2. Correção de métricas do aluno — `ProgressService.updateStudentStats` reescrito: `level` calculado como `floor(totalPoints/200)+1`; `streak` incrementa apenas uma vez por dia; erros não mais silenciados. `useStudentWeeklyProgress` lê perfil diretamente do Firestore.
 
-3. **Simplificação do AnalyticsService** — de ~1.545 para ~450 linhas. Queries `collectionGroup` diretas substituem abstrações que produziam `completionRate` de 200%, 111%.
+3. Simplificação do AnalyticsService — de ~1.545 para ~450 linhas. Queries `collectionGroup` diretas substituem abstrações que produziam `completionRate` de 200%, 111%.
 
-4. **Novas funcionalidades para aluno** — `FloatingTimer` (relógio analógico SVG) + `ActivityTimerContext` (timer global) + `SubjectBarChart` (gráfico de matérias).
+4. Novas funcionalidades para aluno — `FloatingTimer` (relógio analógico SVG) + `ActivityTimerContext` (timer global) + `SubjectBarChart` (gráfico de matérias).
 
 **Artefatos temporários/inseguros:** removidos em commits de limpeza antes do HEAD final. A branch está livre de rotas admin sem auth, patches WIP versionados e arquivos acidentais.
 
@@ -93,7 +121,7 @@ Esta branch contém **10 commits** com alterações em **43 arquivos** (42 de pr
 
 ## 3. Scope
 
-**Dentro do escopo desta branch:**
+Dentro do escopo desta branch:
 - Edição e persistência de cronogramas (Professional)
 - Métricas permanentes do aluno: `totalPoints`, `level`, `streak`
 - Weekly progress: `completionRate`, `completedCount`, `totalActivities`
@@ -123,7 +151,6 @@ Esta branch contém **10 commits** com alterações em **43 arquivos** (42 de pr
 | Infrastructure | `firebase/config.ts`, `tsconfig.json`, `package-lock.json` | Modified | Baixo |
 | Types / Utils | `types/schedule.ts`, `types/analytics.ts`, `dateUtils.ts`, `validationUtils.ts` | Modified | Baixo–Médio |
 | Documentation | `docs/CHANGE_REPORT.md` | Added | N/A |
-
 ---
 
 ## 5. Detailed Changes by Feature
@@ -132,28 +159,28 @@ Esta branch contém **10 commits** com alterações em **43 arquivos** (42 de pr
 
 ### 5.1 — Edição e Persistência de Cronogramas
 
-**Problema original**
+Problema original
 Editar um cronograma não persistia no Firestore — `ScheduleService` não possuía método de update. Atividades podiam ser duplicadas em reatribuições. `AssignmentInterface` carregava `engagementScore`, stats de alunos e `StudentService` desnecessários (~1.141 linhas de complexidade acidental).
 
-**Causa raiz**
+Causa raiz
 - `ScheduleService`: ausência de `updateScheduleTemplate()`
 - `ScheduleInstanceService.assignScheduleToStudents`: verificação de instâncias ativas não confiável
 - `generateWeekActivities`: sem deduplicação em reatribuições
 
-**Solução implementada**
+Solução implementada
 - `ScheduleService`: `updateScheduleTemplate()` com batch operation — delete das atividades antigas + write das novas em operação atômica
 - `ScheduleInstanceService`: `assignScheduleToStudents` reescrito com guard via `collectionGroup`; `generateWeekActivities` simplificado com batch Firestore; orphan blocking adicionado em `getWeekActivities`
 - `AssignmentInterface`: reduzido de ~1.141 para ~500 linhas — removidos `engagementScore`, `StudentService`, stats desnecessários
 - `ScheduleBuilder`, `ScheduleHeaderPanel`, `QuickActivityModal`: refatorados para novo fluxo
 
-**Por que é seguro**
+Por que é seguro
 Batch operations são atômicas — ou tudo escrito ou nada. Guard de instância ativa previne duplicação em novas atribuições.
 
-**Riscos restantes**
+Riscos restantes
 - Instâncias históricas duplicadas (pré-branch) não limpas automaticamente — requer cleanup via `/debug/instances-cleaner` antes de deploy em produção
 - `Requires validation` em staging com múltiplos alunos por cronograma
 
-**Testes recomendados**
+Testes recomendados
 1. Criar cronograma → editar atividade → verificar persistência no Firestore sem refresh
 2. Atribuir mesmo cronograma duas vezes ao mesmo aluno → deve bloquear
 3. Firestore: máximo 1 instância ativa por `(studentId, scheduleId)`
@@ -162,13 +189,13 @@ Batch operations são atômicas — ou tudo escrito ou nada. Guard de instância
 
 ### 5.2 — Correção das Métricas Permanentes do Aluno
 
-**Problema original**
+Problema original
 `level` não recalculado ao completar atividade. `streak` incrementado em cada atividade completada, inclusive múltiplas no mesmo dia. Erros de escrita no Firestore silenciados com catch vazio.
 
-**Causa raiz**
+Causa raiz
 `ProgressService.updateStudentStats` usava `increment(1)` para streak incondicionalmente; não derivava `level` — apenas acumulava pontos.
 
-**Solução implementada** (`lib/services/ProgressService.ts`)
+Solução implementada (`lib/services/ProgressService.ts`)
 
 ```typescript
 // ANTES
@@ -202,7 +229,7 @@ await updateDoc(studentRef, payload);  // erro sobe para o chamador
 
 Adicionado `recalculateStudentPermanentMetrics(studentId, { dryRun })` para correção de dados históricos com modo de inspeção antes de qualquer escrita.
 
-**Riscos restantes**
+Riscos restantes
 - Race condition teórica: dois `completeActivity` simultâneos leem o mesmo `currentPoints` antes de qualquer write, resultando em `newLevel` calculado sobre valor desatualizado. Probabilidade baixa. Solução definitiva: Firestore transaction.
 - `alreadyActiveToday` usa timezone do ambiente de execução — divergência de timezone pode afetar streak. `Requires validation`.
 
@@ -210,19 +237,19 @@ Adicionado `recalculateStudentPermanentMetrics(studentId, { dryRun })` para corr
 
 ### 5.3 — Hardening do Weekly Progress Hook
 
-**Problema original**
+Problema original
 `useStudentWeeklyProgress` somava `totalPointsEarned` de todos os `weeklySnapshots` históricos, inflando `totalPoints` e `completedActivities` exibidos no `ProgressTracking`.
 
-**Causa raiz**
+Causa raiz
 `calculateCurrentMetrics` acumulava todos os snapshots ao invés de ler o valor canônico do perfil do aluno.
 
-**Solução implementada** (`hooks/useStudentWeeklyProgress.ts`)
+Solução implementada (`hooks/useStudentWeeklyProgress.ts`)
 - `totalPoints`, `streak`, `level` lidos diretamente de `students/{id}/profile` via `getDoc`
 - `completedCount` e `totalActivities` calculados via `ScheduleInstanceService.getWeekActivities()` — semana atual apenas
 - `completionRate = completedCount / totalActivities * 100` (semana atual, não histórico acumulado)
 - Dependências de `useCallback` enxugadas para `[user?.id, user?.role, calculateTimeSpent]`
 
-**Riscos restantes**
+Riscos restantes
 - 3 queries por montagem: `getDoc(student)` + `getDocs(weeklySnapshots)` + `getWeekActivities()`. Sem cache. Performance degradável se componente remontado frequentemente.
 - `getWeekActivities` usa `collectionGroup` — requer índice composto no Firestore. `Requires validation`.
 - Logs de diagnóstico `console.group` / `console.log` excessivos — remover antes do merge.
@@ -231,19 +258,19 @@ Adicionado `recalculateStudentPermanentMetrics(studentId, { dryRun })` para corr
 
 ### 5.4 — Correção de Analytics com Percentuais > 100%
 
-**Problema original**
+Problema original
 `AnalyticsService` produzia `completionRate` de 200%, 111%. `adherenceScore` e `consistencyScore` extrapolavam 100. Dashboard profissional exibia valores impossíveis.
 
-**Causa raiz**
+Causa raiz
 Denominadores inconsistentes entre fontes de dados distintas. Ausência de clamp nos cálculos de taxa.
 
-**Solução implementada** (`lib/services/AnalyticsService.ts`)
+Solução implementada (`lib/services/AnalyticsService.ts`)
 - Arquivo reduzido de ~1.545 para ~450 linhas
 - Queries diretas via `collectionGroup('scheduleInstances')` e `collectionGroup('activityProgress')`
 - Valores reais do banco sobrescrevem métricas calculadas em memória a partir de dados parciais
 - Dependência de `GAD7CorrelationService` removida do fluxo de analytics
 
-**Riscos restantes**
+Riscos restantes
 - Presença de `clampPercent()` no novo código não confirmada no diff analisado. `Requires validation`: testar edge cases com 0 atividades e denominador zero.
 - `collectionGroup` queries requerem índices compostos — verificar Firebase Console antes de deploy.
 
@@ -251,19 +278,19 @@ Denominadores inconsistentes entre fontes de dados distintas. Ausência de clamp
 
 ### 5.5 — Timer de Atividade (FloatingTimer + ActivityTimerContext)
 
-**Adicionado**
+Adicionado
 - `context/ActivityTimerContext.tsx` (65 linhas): Context React com `startTimer()`, `stopTimer()`, `elapsedSeconds`. `setInterval` de 1s com cleanup correto em `useEffect`.
 - `components/student/FloatingTimer.tsx` (167 linhas): Componente `fixed bottom-6 right-6` com relógio analógico SVG, tempo restante/decorrido e botão "Concluir Atividade" → chama `ProgressService.completeActivity`.
 - `app/student/layout.tsx`: `ActivityTimerProvider` adicionado ao layout do aluno.
 
-**Riscos**
-
-| Risco | Detalhe |
-|---|---|
-| Erro silenciado | `handleComplete` usa catch vazio — falha de conclusão sem feedback ao usuário |
-| Conclusão sem confirmação | Clique acidental conclui a atividade permanentemente no Firestore |
-| Timer não persiste em refresh | Estado em memória — sobrevive à navegação dentro do layout, não ao reload |
-
+Riscos
+|-------------------------------|-------------------------------------------------------------------------------|
+|              Risco            |                                  Detalhe                                      |
+|-------------------------------|-------------------------------------------------------------------------------|
+|        Erro silenciado        | `handleComplete` usa catch vazio — falha de conclusão sem feedback ao usuário |
+|   Conclusão sem confirmação   | Clique acidental conclui a atividade permanentemente no Firestore             |
+| Timer não persiste em refresh | Estado em memória — sobrevive à navegação dentro do layout, não ao reload     |
+|-------------------------------|-------------------------------------------------------------------------------|
 ---
 
 ### 5.6 — Live Profile Stats no StudentDashboard
@@ -277,7 +304,7 @@ Denominadores inconsistentes entre fontes de dados distintas. Ausência de clamp
 
 `dashboardTodayActivities` computado via `useMemo` filtrando `weekActivities` pelo `dayOfWeek` atual.
 
-**Riscos**
+Riscos
 - Verificar que `unsubscribe()` é chamado no cleanup do `useEffect` — listener sem cleanup causa memory leak
 - Convenção de `dayOfWeek`: 0 = Domingo (JS padrão) vs 0 = Segunda (calendário civil) deve ser consistente entre `StudentDashboard` e `useStudentSchedule`. `Requires validation`.
 
@@ -327,6 +354,15 @@ Impacto em produção: zero. Impacto em desenvolvimento local: devs que dependem
 ---
 
 ## 7. Data Integrity Assessment
+|-------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------|
+|     Coleção Firestore   |   Risco   |                                                         Detalhe                                                         |
+|-------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------|
+| `students/{id}/profile` |   Médio   | `updateStudentStats` sobrescreve `level`; `recalculateStudentPermanentMetrics` sobrescreve `totalPoints` + `level`.Race    condition teórica em atividades simultâneas. |
+|    `activityProgress`   |   Baixo   | Apenas lido. Nenhuma escrita destrutiva identificada.                                                                   |
+|   `scheduleInstances`   |   Médio   | `assignScheduleToStudents` reescrito — instâncias históricas duplicadas não limpas automaticamente.                     |
+|    `weeklySnapshots`    |   Baixo   | Upsert com ID previsível `{studentId}_week_{n}` — padrão seguro.                                                        |
+|     Uploads / anexos    |    N/A    | Não modificado nesta branch.                                                                                            |
+|-------------------------|-----------|-------------------------------------------------------------------------------------------------------------------------|
 
 | Coleção Firestore | Risco | Detalhe |
 |---|---|---|
@@ -355,15 +391,15 @@ Impacto em produção: zero. Impacto em desenvolvimento local: devs que dependem
 
 ---
 
-## 9. Testing Plan
+## 9. Testing Plan                                            
 
-**Schedule**
+Schedule
 1. Criar cronograma com 3 atividades → publicar → verificar documentos no Firestore
 2. Editar nome + 1 atividade → salvar → aluno deve ver versão atualizada sem refresh
 3. Atribuir mesmo cronograma duas vezes ao mesmo aluno → deve bloquear com erro
 4. `ScheduleWeekView`: atividades devem aparecer no dia correto — testar Segunda a Domingo
 
-**Métricas do aluno**
+Métricas do aluno
 5. Completar 1ª atividade do dia → `streak` +1; completar 2ª no mesmo dia → `streak` não muda
 6. Completar atividade → verificar `profile.level = floor((currentPoints+pts)/200)+1` no Firestore
 
@@ -376,7 +412,7 @@ Impacto em produção: zero. Impacto em desenvolvimento local: devs que dependem
 10. Dashboard profissional → `completionRate` ≤ 100% em todos os cenários
 11. Analytics de aluno com 0 atividades → sem crash, sem NaN
 
-**Regressão**
+Regressão
 - `ProgressTracking` exibe dados corretos após mudança em `useStudentWeeklyProgress`
 - `app/student/progress/page.tsx` carrega sem erro
 - Páginas profissionais de analytics carregam sem erro
@@ -404,16 +440,17 @@ Impacto em produção: zero. Impacto em desenvolvimento local: devs que dependem
 
 ## 12. Open Questions
 
-| # | Questão | Urgência |
-|---|---|---|
-| 1 | Índices `collectionGroup` no Firestore existem? | Pré-deploy obrigatório |
-| 2 | Race condition em `updateStudentStats`: aceitar risco ou migrar para transaction? | Médio prazo |
-| 3 | `handleComplete` no FloatingTimer silencia erros — intencional (best-effort) ou requer feedback? | Pré-merge |
-| 4 | `dayOfWeek` convention: 0=Domingo (JS) ou 0=Segunda (calendário civil)? | Pré-merge obrigatório |
-| 5 | `totalActivities: 5` hardcoded em `updateWeeklySnapshot` — substituir por contagem real | Pós-merge |
-| 6 | Cleanup de instâncias históricas duplicadas: quando e quem executa? | Pré-deploy |
-| 7 | `console.group` / `console.log` excessivos em hooks e services — remover | Pré-merge |
-
+|---|--------------------------------------------------------------------------------------------------|------------------------|
+| # |                                             Questão                                              | Urgência               |
+|---|--------------------------------------------------------------------------------------------------|------------------------|
+| 1 |                         Índices `collectionGroup` no Firestore existem?                          | Pré-deploy obrigatório |
+| 2 |         Race condition em `updateStudentStats`: aceitar risco ou migrar para transaction?        | Médio prazo            |
+| 3 | `handleComplete` no FloatingTimer silencia erros — intencional (best-effort) ou requer feedback? | Pré-merge              |
+| 4 |               `dayOfWeek` convention: 0=Domingo (JS) ou 0=Segunda (calendário civil)?            | Pré-merge obrigatório  |
+| 5 |      `totalActivities: 5` hardcoded em `updateWeeklySnapshot` — substituir por contagem real     | Pós-merge              |
+| 6 |                Cleanup de instâncias históricas duplicadas: quando e quem executa?               | Pré-deploy             |
+| 7 |             `console.group` / `console.log` excessivos em hooks e services — remover             | Pré-merge              |
+|---|--------------------------------------------------------------------------------------------------|------------------------|  
 ---
 
 ## 13. Classificação
@@ -448,18 +485,18 @@ Os itens abaixo estão funcionalmente corretos com base no diff analisado, mas r
 ## fix(schedules+student): schedule editing, student metrics, analytics
 
 ### Summary
-- **Schedule editing**: `ScheduleService.updateScheduleTemplate()` with atomic batch operations.
+- Schedule editing: `ScheduleService.updateScheduleTemplate()` with atomic batch operations.
   `ScheduleInstanceService` rewritten with duplicate-instance guard + orphan blocking.
   `AssignmentInterface` simplified from ~1,141 to ~500 lines.
 
-- **Student metrics**: `ProgressService.updateStudentStats` reads current state before writing,
+- Student metrics: `ProgressService.updateStudentStats` reads current state before writing,
   derives `level = floor(totalPoints/200)+1`, increments `streak` only once per calendar day.
   Errors no longer silenced.
 
-- **Analytics**: `AnalyticsService` reduced from ~1,545 to ~450 lines. Direct `collectionGroup`
+- Analytics: `AnalyticsService` reduced from ~1,545 to ~450 lines. Direct `collectionGroup`
   queries replace abstractions that produced completion rates > 100%.
 
-- **Activity timer**: `ActivityTimerContext` + `FloatingTimer` (analog SVG clock).
+- Activity timer: `ActivityTimerContext` + `FloatingTimer` (analog SVG clock).
   Persists across student layout navigation.
 
 ### Not changed

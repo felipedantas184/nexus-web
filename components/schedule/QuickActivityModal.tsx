@@ -39,62 +39,7 @@ interface QuickActivityModalProps {
   formData: CreateScheduleDTO;
 }
 
-const SUBJECTS_BY_GRADE: Record<string, string[]> = {
-  '1ano-em': [
-    'Língua Portuguesa',
-    'Leitura e Produção de Textos',
-    'Inglês',
-    'Literatura',
-    'Arte',
-    'Filosofia',
-    'Sociologia',
-    'Geografia Humana',
-    'Geografia Física',
-    'História do Brasil',
-    'História Geral',
-    'História da América',
-    'Química 1',
-    'Química 2',
-    'Biologia 1',
-    'Biologia 2',
-    'Física 1',
-    'Física 2',
-    'Matemática Básica',
-    'Álgebra',
-    'Geometria',
-  ],
-  '2ano-em': [
-    'Língua Portuguesa',
-    'Leitura e Produção de Texto',
-    'Arte',
-    'Inglês',
-    'Literatura',
-    'Filosofia',
-    'Sociologia',
-    'História do Brasil',
-    'História Geral',
-    'História Contemporânea',
-    'Geografia Física',
-    'Geografia Humana',
-    'Geografia Política',
-    'Química Orgânica',
-    'Físico-Química',
-    'Física 1',
-    'Física 2',
-    'Física 3',
-    'Biologia 1',
-    'Biologia 2',
-    'Biologia 3',
-    'Matemática Básica',
-    'Álgebra',
-    'Geometria',
-  ],
-};
-
-const GRADE_LABELS: Record<string, string> = {
-  '1ano-em': '1ª Série',
-  '2ano-em': '2ª Série',
-};
+import { SUBJECTS_BY_GRADE, GRADE_LABELS } from '@/lib/constants/subjects';
 
 const activityTypes: Array<{
   type: ActivityType;
@@ -181,8 +126,6 @@ export default function QuickActivityModal({
       gradeLevel: null,
       subject: null
     },
-    estimatedDuration: 60,
-    pointsOnCompletion: 10
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -193,11 +136,8 @@ export default function QuickActivityModal({
   // Inicializar com dados existentes
   useEffect(() => {
     if (initialData) {
-      // ✅ CORREÇÃO: Limpar campos duplicados
-      const { estimatedDuration, pointsOnCompletion, ...cleanData } = initialData;
-
       setForm({
-        ...cleanData,
+        ...initialData,
         config: initialData.config || {},
         scoring: initialData.scoring || {
           isRequired: true,
@@ -266,8 +206,6 @@ export default function QuickActivityModal({
         gradeLevel: form.metadata?.gradeLevel || null,
         subject: form.metadata?.subject || null
       },
-      estimatedDuration: form.metadata?.estimatedDuration || 15,
-      pointsOnCompletion: form.scoring?.pointsOnCompletion || 10
     };
 
     onSave(activityData, repeatDays);

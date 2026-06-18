@@ -25,6 +25,9 @@ import SubjectBarChart, { computeSubjectStats } from '@/components/charts/Subjec
 import { doc, onSnapshot } from 'firebase/firestore';
 import { firestore, auth } from '@/firebase/config';
 
+const DEBUG = process.env.NEXT_PUBLIC_ENABLE_DEBUG === 'true';
+const debugLog = (...args: unknown[]) => { if (DEBUG) console.log(...args); };
+
 interface StudentDashboardProps {
   showHeader?: boolean;
 }
@@ -50,7 +53,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
     const unsubscribe = onSnapshot(ref, (snap) => {
       const rawData = snap.data();
 
-      console.log('[STUDENT_DASHBOARD_PROFILE_STATS]', {
+      debugLog('[STUDENT_DASHBOARD_PROFILE_STATS]', {
         uid,
         exists: snap.exists(),
         rawData,
@@ -78,6 +81,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
 
   const {
     weekActivities,
+    allActivities,
     instances,
     loading,
     error,
@@ -105,22 +109,20 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
     return 'Boa noite';
   };
 
-  // Usa a mesma referência de dia da tela /student/schedules:
-  // JS getDay(): 0=Domingo, 1=Segunda, ..., 6=Sábado.
-  // Não usa scheduledDate aqui porque os dados antigos podem ter offset de data.
+  // Schedule dayOfWeek: 0=Seg, 1=Ter ... 6=Dom
+  // JS getDay():        0=Dom, 1=Seg ... 6=Sab
+  // Conversão: (jsDay + 6) % 7
   const dashboardTodayActivities = useMemo(() => {
-    const selectedDay = new Date().getDay();
+    const selectedDay = (new Date().getDay() + 6) % 7;
     const seen = new Set<string>();
 
     return weekActivities.filter(activity => {
       if (activity.dayOfWeek !== selectedDay) return false;
 
-      // Deduplicação leve para evitar exibir a mesma atividade quando há instâncias repetidas.
-      // Prioriza activityId; se não existir, tenta id do snapshot; por último, usa uma chave semântica.
-      const key =
-        activity.activityId ||
-        activity.activitySnapshot?.id ||
-        `${activity.activitySnapshot?.title}-${activity.dayOfWeek}-${activity.activitySnapshot?.type}`;
+      // Deduplicação por scheduleInstanceId + activityId.
+      // Isso permite que a mesma atividade de templates diferentes apareça, mas
+      // evita duplicatas dentro da mesma instância (regeneração, etc.).
+      const key = `${activity.scheduleInstanceId}_${activity.activityId || activity.activitySnapshot?.id || `${activity.activitySnapshot?.title}-${activity.dayOfWeek}-${activity.activitySnapshot?.type}`}`;
 
       if (seen.has(key)) return false;
 
@@ -152,8 +154,7 @@ export default function StudentDashboard({ showHeader = true }: StudentDashboard
       ? Math.round((completedToday / totalTodayActivities) * 100)
       : 0;
 
-  // Gráfico de matérias: atividades concluídas da semana agrupadas por matéria
-  const subjectStats = useMemo(() => computeSubjectStats(weekActivities || []), [weekActivities]);
+  const subjectStats = useMemo(() => computeSubjectStats(allActivities), [allActivities]);
 
   const getMotivationalMessage = () => {
     const messages = [
